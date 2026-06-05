@@ -161,10 +161,10 @@ export default function Rules() {
       p_models: form.models.length > 0 ? form.models : null,
       p_year_from: form.year_from ? parseInt(form.year_from) : null,
       p_year_to: form.year_to ? parseInt(form.year_to) : null,
-      p_transmission: form.transmissions.length === 1 ? form.transmissions[0] : null,
-      p_drive: form.drive_types.length === 1 ? form.drive_types[0] : null,
-      p_fuel: form.fuel_types.length === 1 ? form.fuel_types[0] : null,
-      p_engine: form.engines.length === 1 ? form.engines[0] : null,
+      p_transmissions: form.transmissions.length > 0 ? form.transmissions : null,
+      p_drives: form.drive_types.length > 0 ? form.drive_types : null,
+      p_fuels: form.fuel_types.length > 0 ? form.fuel_types : null,
+      p_engines: form.engines.length > 0 ? form.engines : null,
     })
     setVehicleCount(data || 0)
   }
