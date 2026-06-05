@@ -5,8 +5,8 @@ import { DRIVE_TYPE_OPTIONS, TRANSMISSION_OPTIONS, FUEL_TYPE_OPTIONS } from '../
 const EMPTY_RULE = {
   maintenance_type_id: '',
   year_from: '', year_to: '',
-  makes: [],      // tableau de marques
-  models: [],     // tableau de modèles
+  makes: [],
+  models: [],
   engine: '',
   transmission: '', drive_type: '', fuel_type: '',
   initial_months: '', initial_km: '',
@@ -15,9 +15,10 @@ const EMPTY_RULE = {
 }
 
 const YEARS = Array.from({ length: new Date().getFullYear() - 1994 + 1 }, (_, i) => 1995 + i).reverse()
+const VEHICLE_TYPES = ['car', 'truck', 'mpv', 'van']
 
 // --- Composant Tag Selector ---
-function TagSelector({ label, options, selected, onChange, disabled, loading, placeholder }) {
+function TagSelector({ label, options, selected, onChange, disabled, loading, placeholder, hint }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef(null)
@@ -41,11 +42,11 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>
+    <div ref={ref} style={{ position: 'relative', marginBottom: 16 }}>
+      <div style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>
         {label}
         {loading && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
-      </label>
+      </div>
       <div
         onClick={() => !disabled && setOpen(!open)}
         style={{
@@ -64,7 +65,9 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
         }}
       >
         {selected.length === 0 && (
-          <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>{disabled ? placeholder : 'Tous (cliquer pour filtrer)'}</span>
+          <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>
+            {disabled ? placeholder : 'Tous (cliquer pour filtrer)'}
+          </span>
         )}
         {selected.map(tag => (
           <span key={tag} style={{
@@ -78,13 +81,14 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
           </span>
         ))}
       </div>
+      {hint && <div className="form-hint">{hint}</div>}
 
       {open && !disabled && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
           background: 'white', border: '1px solid var(--gray-200)',
           borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-          marginTop: 4, maxHeight: 240, display: 'flex', flexDirection: 'column'
+          marginTop: 4, maxHeight: 260, display: 'flex', flexDirection: 'column'
         }}>
           <div style={{ padding: '8px 8px 4px' }}>
             <input
@@ -93,12 +97,12 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
               value={search}
               onChange={e => setSearch(e.target.value)}
               onClick={e => e.stopPropagation()}
-              style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: '1px solid var(--gray-200)', borderRadius: 6 }}
+              style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: '1px solid var(--gray-200)', borderRadius: 6, outline: 'none' }}
             />
           </div>
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {filtered.length === 0 ? (
-              <div style={{ padding: '12px 12px', fontSize: 13, color: 'var(--gray-400)' }}>Aucun résultat</div>
+              <div style={{ padding: '12px', fontSize: 13, color: 'var(--gray-400)' }}>Aucun résultat</div>
             ) : filtered.map(opt => (
               <div
                 key={opt}
@@ -155,20 +159,15 @@ export default function Rules() {
   const [loadingMakes, setLoadingMakes] = useState(false)
   const [loadingModels, setLoadingModels] = useState(false)
   const [vehicleCount, setVehicleCount] = useState(null)
-  const [countingVehicles, setCountingVehicles] = useState(false)
 
   useEffect(() => { loadData() }, [])
-
-  // Charger toutes les marques au montage
   useEffect(() => { loadAllMakes() }, [])
 
-  // Recharger les modèles quand les marques ou années changent
   useEffect(() => {
     if (form.makes.length > 0) loadModelsForMakes()
-    else setAvailableModels([])
+    else { setAvailableModels([]); setForm(f => ({ ...f, models: [] })) }
   }, [form.makes, form.year_from, form.year_to])
 
-  // Estimer le nombre de véhicules couverts
   useEffect(() => {
     estimateVehicleCount()
   }, [form.makes, form.models, form.year_from, form.year_to, form.transmission, form.fuel_type, form.drive_type])
@@ -176,9 +175,14 @@ export default function Rules() {
   async function loadAllMakes() {
     setLoadingMakes(true)
     try {
-      const res = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json')
-      const data = await res.json()
-      const sorted = [...new Set((data.Results || []).map(m => m.MakeName).filter(Boolean))].sort()
+      // On charge toutes les marques pour tous les types de véhicules
+      const promises = VEHICLE_TYPES.map(type =>
+        fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/${type}?format=json`)
+          .then(r => r.json())
+          .then(d => (d.Results || []).map(m => m.MakeName).filter(Boolean))
+      )
+      const results = await Promise.all(promises)
+      const sorted = [...new Set(results.flat())].sort()
       setAllMakes(sorted)
     } catch (e) { setAllMakes([]) }
     setLoadingMakes(false)
@@ -189,44 +193,41 @@ export default function Rules() {
     setLoadingModels(true)
     const year = form.year_from || form.year_to
     try {
-      const promises = form.makes.map(make => {
-        const url = year
-          ? `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}/vehicleType/car?format=json`
-          : `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`
-        return fetch(url).then(r => r.json()).then(d => (d.Results || []).map(m => m.Model_Name).filter(Boolean))
-      })
+      const promises = []
+      for (const make of form.makes) {
+        for (const type of VEHICLE_TYPES) {
+          const url = year
+            ? `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}/vehicleType/${type}?format=json`
+            : `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`
+          promises.push(
+            fetch(url).then(r => r.json()).then(d => (d.Results || []).map(m => m.Model_Name).filter(Boolean))
+          )
+        }
+      }
       const results = await Promise.all(promises)
       const allModels = [...new Set(results.flat())].sort()
       setAvailableModels(allModels)
-      // Retirer les modèles sélectionnés qui ne sont plus disponibles
       setForm(f => ({ ...f, models: f.models.filter(m => allModels.includes(m)) }))
     } catch (e) { setAvailableModels([]) }
     setLoadingModels(false)
   }
 
-  async function estimateVehicleCount() {
-    // Estimation basée sur les critères sélectionnés
-    setCountingVehicles(true)
-    try {
-      const yearFrom = parseInt(form.year_from) || 1995
-      const yearTo = parseInt(form.year_to) || new Date().getFullYear()
-      const nbYears = yearTo - yearFrom + 1
+  function estimateVehicleCount() {
+    const yearFrom = parseInt(form.year_from) || 1995
+    const yearTo = parseInt(form.year_to) || new Date().getFullYear()
+    const nbYears = Math.max(1, yearTo - yearFrom + 1)
 
-      if (form.makes.length === 0 && form.models.length === 0) {
-        // Règle très large — estimation globale
-        const multiplier = nbYears * 50 // ~50 modèles/marques par année en moyenne
-        setVehicleCount({ min: multiplier * 8, max: multiplier * 15, label: 'Très large' })
-      } else if (form.makes.length > 0 && form.models.length === 0) {
-        // Par marque seulement
-        const count = form.makes.length * nbYears * 8
-        setVehicleCount({ min: count, max: count * 3, label: 'Large' })
-      } else if (form.models.length > 0) {
-        // Par modèle précis
-        const count = form.models.length * nbYears
-        setVehicleCount({ min: count, max: count * 4, label: form.models.length > 3 ? 'Moyen' : 'Précis' })
-      }
-    } catch (e) { setVehicleCount(null) }
-    setCountingVehicles(false)
+    if (form.makes.length === 0 && form.models.length === 0) {
+      setVehicleCount({ min: nbYears * 400, max: nbYears * 800, label: 'Très large' })
+    } else if (form.makes.length > 0 && form.models.length === 0) {
+      const count = form.makes.length * nbYears * 10
+      setVehicleCount({ min: count, max: count * 3, label: 'Large' })
+    } else if (form.models.length > 0) {
+      const count = form.models.length * nbYears
+      setVehicleCount({ min: count, max: count * 3, label: form.models.length > 4 ? 'Moyen' : 'Précis' })
+    } else {
+      setVehicleCount(null)
+    }
   }
 
   async function loadData() {
@@ -254,8 +255,8 @@ export default function Rules() {
       maintenance_type_id: rule.maintenance_type_id || '',
       year_from: rule.year_from || '',
       year_to: rule.year_to || '',
-      makes: rule.makes || [],
-      models: rule.models || [],
+      makes: rule.makes || (rule.make ? [rule.make] : []),
+      models: rule.models || (rule.model ? [rule.model] : []),
       engine: rule.engine || '',
       transmission: rule.transmission || '',
       drive_type: rule.drive_type || '',
@@ -289,8 +290,8 @@ export default function Rules() {
       year_to: form.year_to ? parseInt(form.year_to) : null,
       makes: form.makes.length > 0 ? form.makes : null,
       models: form.models.length > 0 ? form.models : null,
-      make: form.makes.length === 1 ? form.makes[0] : null, // compatibilité
-      model: form.models.length === 1 ? form.models[0] : null,
+      make: form.makes.length === 1 ? form.makes[0] : (form.makes.length === 0 ? null : form.makes[0]),
+      model: form.models.length === 1 ? form.models[0] : (form.models.length === 0 ? null : form.models[0]),
       engine: form.engine || null,
       transmission: form.transmission || null,
       drive_type: form.drive_type || null,
@@ -322,8 +323,10 @@ export default function Rules() {
   function getScore(rule) {
     let s = 0
     if (rule.year_from || rule.year_to) s += 2
-    if (rule.makes?.length > 0 || rule.make) s += 3
-    if (rule.models?.length > 0 || rule.model) s += 4
+    const hasMakes = (rule.makes?.length > 0) || rule.make
+    const hasModels = (rule.models?.length > 0) || rule.model
+    if (hasMakes) s += 3
+    if (hasModels) s += 4
     if (rule.transmission) s += 2
     if (rule.drive_type) s += 2
     if (rule.fuel_type) s += 2
@@ -353,12 +356,11 @@ export default function Rules() {
     return true
   })
 
-  // Couleur du badge de couverture
-  function coverageColor(label) {
-    if (label === 'Très large') return { bg: '#FEF3C7', color: '#92400E' }
-    if (label === 'Large') return { bg: '#DBEAFE', color: '#1E40AF' }
-    if (label === 'Moyen') return { bg: '#D1FAE5', color: '#065F46' }
-    return { bg: '#F3F4F6', color: '#374151' }
+  function coverageStyle(label) {
+    if (label === 'Très large') return { bg: '#FEF3C7', color: '#92400E', icon: '🌍' }
+    if (label === 'Large') return { bg: '#DBEAFE', color: '#1E40AF', icon: '🚗' }
+    if (label === 'Moyen') return { bg: '#D1FAE5', color: '#065F46', icon: '🎯' }
+    return { bg: '#F3F4F6', color: '#374151', icon: '🔬' }
   }
 
   return (
@@ -371,7 +373,6 @@ export default function Rules() {
         <button className="btn btn-primary" onClick={openNew}>+ Nouvelle règle</button>
       </div>
 
-      {/* Filtres */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-body" style={{ display: 'flex', gap: 12, padding: '12px 16px' }}>
           <input placeholder="🔍 Rechercher..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 240 }} />
@@ -385,7 +386,6 @@ export default function Rules() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="card">
         <div className="table-wrap">
           {loading ? (
@@ -418,14 +418,14 @@ export default function Rules() {
                     </td>
                     <td><span className="badge badge-gray">{describeRule(rule)}</span></td>
                     <td>
-                      {rule.initial_months || rule.initial_km ? (
-                        <span className="mono">{rule.initial_months ? `${rule.initial_months}m` : '—'} / {rule.initial_km ? `${rule.initial_km.toLocaleString()}km` : '—'}</span>
-                      ) : <span style={{ color: 'var(--gray-300)' }}>—</span>}
+                      {rule.initial_months || rule.initial_km
+                        ? <span className="mono">{rule.initial_months ? `${rule.initial_months}m` : '—'} / {rule.initial_km ? `${rule.initial_km.toLocaleString()}km` : '—'}</span>
+                        : <span style={{ color: 'var(--gray-300)' }}>—</span>}
                     </td>
                     <td>
-                      {rule.repeat_months || rule.repeat_km ? (
-                        <span className="mono">{rule.repeat_months ? `${rule.repeat_months}m` : '—'} / {rule.repeat_km ? `${rule.repeat_km.toLocaleString()}km` : '—'}</span>
-                      ) : <span style={{ color: 'var(--gray-300)' }}>—</span>}
+                      {rule.repeat_months || rule.repeat_km
+                        ? <span className="mono">{rule.repeat_months ? `${rule.repeat_months}m` : '—'} / {rule.repeat_km ? `${rule.repeat_km.toLocaleString()}km` : '—'}</span>
+                        : <span style={{ color: 'var(--gray-300)' }}>—</span>}
                     </td>
                     <td>{rule.price ? <span style={{ fontWeight: 600 }}>{parseFloat(rule.price).toFixed(2)} $</span> : <span style={{ color: 'var(--gray-300)' }}>—</span>}</td>
                     <td><span className="score-pill">{getScore(rule)}</span></td>
@@ -443,7 +443,6 @@ export default function Rules() {
         </div>
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal" style={{ maxWidth: 720 }}>
@@ -453,33 +452,30 @@ export default function Rules() {
             </div>
             <div className="modal-body">
 
-              {/* Type d'entretien */}
               <div className="section-label">Type d'entretien</div>
               <div className="form-group">
-                <label>Type d'entretien *</label>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Type d'entretien *</div>
                 <select value={form.maintenance_type_id} onChange={e => setField('maintenance_type_id', e.target.value)}>
                   <option value="">Sélectionner...</option>
                   {types.map(t => <option key={t.id} value={t.id}>{t.code} — {t.name}</option>)}
                 </select>
               </div>
 
-              {/* Critères */}
               <div className="section-label" style={{ marginTop: 20 }}>
                 Critères de ciblage
                 <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11 }}> — laisser vide = s'applique à tous</span>
               </div>
 
-              {/* Années */}
               <div className="form-row form-row-2" style={{ marginBottom: 16 }}>
                 <div>
-                  <label>Année de</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Année de</div>
                   <select value={form.year_from} onChange={e => setField('year_from', e.target.value)}>
                     <option value="">Toutes</option>
                     {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label>Année à</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Année à</div>
                   <select value={form.year_to} onChange={e => setField('year_to', e.target.value)}>
                     <option value="">Toutes</option>
                     {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
@@ -487,53 +483,46 @@ export default function Rules() {
                 </div>
               </div>
 
-              {/* Marques — tags multiples */}
-              <div className="form-group">
-                <TagSelector
-                  label={`Marques${loadingMakes ? '' : ` (${allMakes.length} disponibles)`}`}
-                  options={allMakes}
-                  selected={form.makes}
-                  onChange={val => setField('makes', val)}
-                  loading={loadingMakes}
-                  placeholder="Chargement..."
-                />
-                {form.makes.length === 0 && <div className="form-hint">Vide = toutes les marques</div>}
-              </div>
+              <TagSelector
+                label={`Marques${loadingMakes ? '' : ` (${allMakes.length} disponibles — cars, trucks, VUS)`}`}
+                options={allMakes}
+                selected={form.makes}
+                onChange={val => setField('makes', val)}
+                loading={loadingMakes}
+                placeholder="Chargement..."
+                hint={form.makes.length === 0 ? 'Vide = toutes les marques' : null}
+              />
 
-              {/* Modèles — tags multiples, filtrés par marques */}
-              <div className="form-group">
-                <TagSelector
-                  label={form.makes.length > 0
-                    ? `Modèles${loadingModels ? '' : ` (${availableModels.length} disponibles pour ${form.makes.join(', ')})`}`
-                    : 'Modèles'}
-                  options={availableModels}
-                  selected={form.models}
-                  onChange={val => setField('models', val)}
-                  loading={loadingModels}
-                  disabled={form.makes.length === 0}
-                  placeholder="Sélectionnez une marque d'abord"
-                />
-                {form.makes.length > 0 && form.models.length === 0 && <div className="form-hint">Vide = tous les modèles de {form.makes.join(', ')}</div>}
-              </div>
+              <TagSelector
+                label={form.makes.length > 0
+                  ? `Modèles${loadingModels ? ' (chargement...)' : ` (${availableModels.length} disponibles — cars, trucks, VUS)`}`
+                  : 'Modèles'}
+                options={availableModels}
+                selected={form.models}
+                onChange={val => setField('models', val)}
+                loading={loadingModels}
+                disabled={form.makes.length === 0}
+                placeholder="Sélectionnez une marque d'abord"
+                hint={form.makes.length > 0 && form.models.length === 0 ? `Vide = tous les modèles de ${form.makes.join(', ')}` : null}
+              />
 
-              {/* Transmission, Propulsion, Carburant */}
               <div className="form-row form-row-3" style={{ marginBottom: 16 }}>
                 <div>
-                  <label>Transmission</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Transmission</div>
                   <select value={form.transmission} onChange={e => setField('transmission', e.target.value)}>
                     <option value="">Toutes</option>
                     {TRANSMISSION_OPTIONS.map(o => <option key={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label>Propulsion</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Propulsion</div>
                   <select value={form.drive_type} onChange={e => setField('drive_type', e.target.value)}>
                     <option value="">Toutes</option>
                     {DRIVE_TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label>Carburant</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Carburant</div>
                   <select value={form.fuel_type} onChange={e => setField('fuel_type', e.target.value)}>
                     <option value="">Tous</option>
                     {FUEL_TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
@@ -541,53 +530,51 @@ export default function Rules() {
                 </div>
               </div>
 
-              {/* Compteur de véhicules couverts */}
               {vehicleCount && (
                 <div style={{
-                  background: coverageColor(vehicleCount.label).bg,
-                  border: `1px solid ${coverageColor(vehicleCount.label).color}30`,
+                  background: coverageStyle(vehicleCount.label).bg,
+                  border: `1px solid ${coverageStyle(vehicleCount.label).color}40`,
                   borderRadius: 8, padding: '10px 14px', marginBottom: 16,
                   display: 'flex', alignItems: 'center', gap: 10
                 }}>
-                  <span style={{ fontSize: 18 }}>🚗</span>
+                  <span style={{ fontSize: 20 }}>{coverageStyle(vehicleCount.label).icon}</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: coverageColor(vehicleCount.label).color }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: coverageStyle(vehicleCount.label).color }}>
                       Couverture estimée : {vehicleCount.label}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--gray-600)' }}>
-                      Cette règle s'appliquera à environ {vehicleCount.min.toLocaleString()}–{vehicleCount.max.toLocaleString()} véhicules
+                      Cette règle s'appliquera à environ {vehicleCount.min.toLocaleString()} – {vehicleCount.max.toLocaleString()} véhicules
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Intervalles */}
-              <div className="section-label" style={{ marginTop: 4 }}>Intervalles et prix</div>
+              <div className="section-label">Intervalles et prix</div>
               <div className="form-row form-row-4" style={{ marginBottom: 12 }}>
                 <div>
-                  <label>Initial — Mois</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Initial — Mois</div>
                   <input type="number" placeholder="ex: 12" value={form.initial_months} onChange={e => setField('initial_months', e.target.value)} />
                 </div>
                 <div>
-                  <label>Initial — Km</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Initial — Km</div>
                   <input type="number" placeholder="ex: 20000" value={form.initial_km} onChange={e => setField('initial_km', e.target.value)} />
                 </div>
                 <div>
-                  <label>Répétition — Mois</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Répétition — Mois</div>
                   <input type="number" placeholder="ex: 12" value={form.repeat_months} onChange={e => setField('repeat_months', e.target.value)} />
                 </div>
                 <div>
-                  <label>Répétition — Km</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Répétition — Km</div>
                   <input type="number" placeholder="ex: 20000" value={form.repeat_km} onChange={e => setField('repeat_km', e.target.value)} />
                 </div>
               </div>
               <div className="form-row form-row-2">
                 <div>
-                  <label>Prix ($)</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Prix ($)</div>
                   <input type="number" step="0.01" placeholder="ex: 89.95" value={form.price} onChange={e => setField('price', e.target.value)} />
                 </div>
                 <div>
-                  <label>Notes internes</label>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Notes internes</div>
                   <input placeholder="Note optionnelle..." value={form.notes} onChange={e => setField('notes', e.target.value)} />
                 </div>
               </div>
@@ -604,7 +591,6 @@ export default function Rules() {
         </div>
       )}
 
-      {/* Confirmation suppression */}
       {deleteConfirm && (
         <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: 400 }}>
