@@ -14,8 +14,7 @@ const EMPTY_RULE = {
   price: '', notes: ''
 }
 
-const YEARS = Array.from({ length: new Date().getFullYear() - 1994 + 1 }, (_, i) => 1995 + i).reverse()
-const VEHICLE_TYPES = ['car', 'truck', 'mpv', 'van']
+const YEARS = Array.from({ length: new Date().getFullYear() - 1999 + 1 }, (_, i) => 2000 + i).reverse()
 
 // --- Composant Tag Selector ---
 function TagSelector({ label, options, selected, onChange, disabled, loading, placeholder, hint }) {
@@ -43,7 +42,7 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
 
   return (
     <div ref={ref} style={{ position: 'relative', marginBottom: 16 }}>
-      <div style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>
         {label}
         {loading && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
       </div>
@@ -52,14 +51,10 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
         style={{
           minHeight: 38,
           border: `1px solid ${open ? 'var(--blue)' : 'var(--gray-300)'}`,
-          borderRadius: 6,
-          padding: '4px 8px',
+          borderRadius: 6, padding: '4px 8px',
           background: disabled ? 'var(--gray-50)' : 'white',
           cursor: disabled ? 'not-allowed' : 'pointer',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 4,
-          alignItems: 'center',
+          display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center',
           boxShadow: open ? '0 0 0 3px rgba(37,99,235,0.08)' : 'none',
           transition: 'border-color 0.15s',
         }}
@@ -140,6 +135,28 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
   )
 }
 
+// --- Composant SingleSelect avec tags ---
+function SingleTagSelector({ label, options, value, onChange, disabled, loading, hint }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>
+        {label}
+        {loading && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
+      </div>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled || loading}
+        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: 13, fontFamily: 'DM Sans, sans-serif', color: 'var(--gray-900)', background: disabled ? 'var(--gray-50)' : 'white' }}
+      >
+        <option value="">Tous</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+      {hint && <div className="form-hint">{hint}</div>}
+    </div>
+  )
+}
+
 // --- Page principale ---
 export default function Rules() {
   const [rules, setRules] = useState([])
@@ -153,81 +170,111 @@ export default function Rules() {
   const [search, setSearch] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // Données NHTSA
-  const [allMakes, setAllMakes] = useState([])
+  // Dropdowns depuis Supabase vehicles
+  const [availableMakes, setAvailableMakes] = useState([])
   const [availableModels, setAvailableModels] = useState([])
-  const [loadingMakes, setLoadingMakes] = useState(false)
-  const [loadingModels, setLoadingModels] = useState(false)
+  const [availableTransmissions, setAvailableTransmissions] = useState([])
+  const [availableDrives, setAvailableDrives] = useState([])
+  const [availableFuels, setAvailableFuels] = useState([])
+  const [availableEngines, setAvailableEngines] = useState([])
   const [vehicleCount, setVehicleCount] = useState(null)
 
+  const [loadingMakes, setLoadingMakes] = useState(false)
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [loadingDetails, setLoadingDetails] = useState(false)
+
   useEffect(() => { loadData() }, [])
-  useEffect(() => { loadAllMakes() }, [])
 
+  // Charger marques quand années changent
   useEffect(() => {
-    if (form.makes.length > 0) loadModelsForMakes()
-    else { setAvailableModels([]); setForm(f => ({ ...f, models: [] })) }
-  }, [form.makes, form.year_from, form.year_to])
+    if (showModal) loadMakes()
+  }, [form.year_from, form.year_to, showModal])
 
+  // Charger modèles quand marques changent
   useEffect(() => {
-    estimateVehicleCount()
+    if (form.makes.length > 0) loadModels()
+    else {
+      setAvailableModels([])
+      setForm(f => ({ ...f, models: [] }))
+    }
+  }, [form.makes])
+
+  // Charger détails quand modèles changent
+  useEffect(() => {
+    loadDetails()
+  }, [form.models, form.makes, form.year_from, form.year_to])
+
+  // Estimer couverture
+  useEffect(() => {
+    estimateCount()
   }, [form.makes, form.models, form.year_from, form.year_to, form.transmission, form.fuel_type, form.drive_type])
 
-  async function loadAllMakes() {
+  async function buildYearFilter(query) {
+    if (form.year_from) query = query.gte('year', parseInt(form.year_from))
+    if (form.year_to) query = query.lte('year', parseInt(form.year_to))
+    return query
+  }
+
+  async function loadMakes() {
     setLoadingMakes(true)
-    try {
-      // On charge toutes les marques pour tous les types de véhicules
-      const promises = VEHICLE_TYPES.map(type =>
-        fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/${type}?format=json`)
-          .then(r => r.json())
-          .then(d => (d.Results || []).map(m => m.MakeName).filter(Boolean))
-      )
-      const results = await Promise.all(promises)
-      const sorted = [...new Set(results.flat())].sort()
-      setAllMakes(sorted)
-    } catch (e) { setAllMakes([]) }
+    let query = supabase.from('vehicles').select('make')
+    if (form.year_from) query = query.gte('year', parseInt(form.year_from))
+    if (form.year_to) query = query.lte('year', parseInt(form.year_to))
+    const { data } = await query
+    const makes = [...new Set((data || []).map(r => r.make))].sort()
+    setAvailableMakes(makes)
     setLoadingMakes(false)
   }
 
-  async function loadModelsForMakes() {
+  async function loadModels() {
     if (form.makes.length === 0) return
     setLoadingModels(true)
-    const year = form.year_from || form.year_to
-    try {
-      const promises = []
-      for (const make of form.makes) {
-        for (const type of VEHICLE_TYPES) {
-          const url = year
-            ? `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}/vehicleType/${type}?format=json`
-            : `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`
-          promises.push(
-            fetch(url).then(r => r.json()).then(d => (d.Results || []).map(m => m.Model_Name).filter(Boolean))
-          )
-        }
-      }
-      const results = await Promise.all(promises)
-      const allModels = [...new Set(results.flat())].sort()
-      setAvailableModels(allModels)
-      setForm(f => ({ ...f, models: f.models.filter(m => allModels.includes(m)) }))
-    } catch (e) { setAvailableModels([]) }
+    let query = supabase.from('vehicles').select('model').in('make', form.makes)
+    if (form.year_from) query = query.gte('year', parseInt(form.year_from))
+    if (form.year_to) query = query.lte('year', parseInt(form.year_to))
+    const { data } = await query
+    const models = [...new Set((data || []).map(r => r.model))].sort()
+    setAvailableModels(models)
+    // Retirer les modèles sélectionnés qui ne sont plus disponibles
+    setForm(f => ({ ...f, models: f.models.filter(m => models.includes(m)) }))
     setLoadingModels(false)
   }
 
-  function estimateVehicleCount() {
-    const yearFrom = parseInt(form.year_from) || 1995
-    const yearTo = parseInt(form.year_to) || new Date().getFullYear()
-    const nbYears = Math.max(1, yearTo - yearFrom + 1)
+  async function loadDetails() {
+    setLoadingDetails(true)
+    let query = supabase.from('vehicles').select('transmission, drive, fuel, engine')
 
-    if (form.makes.length === 0 && form.models.length === 0) {
-      setVehicleCount({ min: nbYears * 400, max: nbYears * 800, label: 'Très large' })
-    } else if (form.makes.length > 0 && form.models.length === 0) {
-      const count = form.makes.length * nbYears * 10
-      setVehicleCount({ min: count, max: count * 3, label: 'Large' })
-    } else if (form.models.length > 0) {
-      const count = form.models.length * nbYears
-      setVehicleCount({ min: count, max: count * 3, label: form.models.length > 4 ? 'Moyen' : 'Précis' })
-    } else {
-      setVehicleCount(null)
-    }
+    if (form.makes.length > 0) query = query.in('make', form.makes)
+    if (form.models.length > 0) query = query.in('model', form.models)
+    if (form.year_from) query = query.gte('year', parseInt(form.year_from))
+    if (form.year_to) query = query.lte('year', parseInt(form.year_to))
+
+    const { data } = await query
+    const rows = data || []
+
+    const trans = [...new Set(rows.map(r => r.transmission).filter(Boolean))].sort()
+    const drives = [...new Set(rows.map(r => r.drive).filter(Boolean))].sort()
+    const fuels = [...new Set(rows.map(r => r.fuel).filter(Boolean))].sort()
+    const engines = [...new Set(rows.map(r => r.engine).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b))
+
+    setAvailableTransmissions(trans)
+    setAvailableDrives(drives)
+    setAvailableFuels(fuels)
+    setAvailableEngines(engines)
+    setLoadingDetails(false)
+  }
+
+  async function estimateCount() {
+    let query = supabase.from('vehicles').select('id', { count: 'exact', head: true })
+    if (form.makes.length > 0) query = query.in('make', form.makes)
+    if (form.models.length > 0) query = query.in('model', form.models)
+    if (form.year_from) query = query.gte('year', parseInt(form.year_from))
+    if (form.year_to) query = query.lte('year', parseInt(form.year_to))
+    if (form.transmission) query = query.eq('transmission', form.transmission)
+    if (form.drive_type) query = query.eq('drive', form.drive_type)
+    if (form.fuel_type) query = query.eq('fuel', form.fuel_type)
+    const { count } = await query
+    setVehicleCount(count || 0)
   }
 
   async function loadData() {
@@ -245,6 +292,10 @@ export default function Rules() {
     setEditing(null)
     setForm(EMPTY_RULE)
     setAvailableModels([])
+    setAvailableTransmissions([])
+    setAvailableDrives([])
+    setAvailableFuels([])
+    setAvailableEngines([])
     setVehicleCount(null)
     setShowModal(true)
   }
@@ -273,9 +324,11 @@ export default function Rules() {
 
   function setField(key, val) {
     if (key === 'makes') {
-      setForm(f => ({ ...f, makes: val, models: [] }))
+      setForm(f => ({ ...f, makes: val, models: [], transmission: '', drive_type: '', fuel_type: '', engine: '' }))
+    } else if (key === 'models') {
+      setForm(f => ({ ...f, models: val, transmission: '', drive_type: '', fuel_type: '', engine: '' }))
     } else if (key === 'year_from' || key === 'year_to') {
-      setForm(f => ({ ...f, [key]: val, models: [] }))
+      setForm(f => ({ ...f, [key]: val, makes: [], models: [], transmission: '', drive_type: '', fuel_type: '', engine: '' }))
     } else {
       setForm(f => ({ ...f, [key]: val }))
     }
@@ -290,8 +343,8 @@ export default function Rules() {
       year_to: form.year_to ? parseInt(form.year_to) : null,
       makes: form.makes.length > 0 ? form.makes : null,
       models: form.models.length > 0 ? form.models : null,
-      make: form.makes.length === 1 ? form.makes[0] : (form.makes.length === 0 ? null : form.makes[0]),
-      model: form.models.length === 1 ? form.models[0] : (form.models.length === 0 ? null : form.models[0]),
+      make: form.makes.length >= 1 ? form.makes[0] : null,
+      model: form.models.length >= 1 ? form.models[0] : null,
       engine: form.engine || null,
       transmission: form.transmission || null,
       drive_type: form.drive_type || null,
@@ -323,10 +376,8 @@ export default function Rules() {
   function getScore(rule) {
     let s = 0
     if (rule.year_from || rule.year_to) s += 2
-    const hasMakes = (rule.makes?.length > 0) || rule.make
-    const hasModels = (rule.models?.length > 0) || rule.model
-    if (hasMakes) s += 3
-    if (hasModels) s += 4
+    if (rule.makes?.length > 0 || rule.make) s += 3
+    if (rule.models?.length > 0 || rule.model) s += 4
     if (rule.transmission) s += 2
     if (rule.drive_type) s += 2
     if (rule.fuel_type) s += 2
@@ -356,12 +407,15 @@ export default function Rules() {
     return true
   })
 
-  function coverageStyle(label) {
-    if (label === 'Très large') return { bg: '#FEF3C7', color: '#92400E', icon: '🌍' }
-    if (label === 'Large') return { bg: '#DBEAFE', color: '#1E40AF', icon: '🚗' }
-    if (label === 'Moyen') return { bg: '#D1FAE5', color: '#065F46', icon: '🎯' }
-    return { bg: '#F3F4F6', color: '#374151', icon: '🔬' }
+  function coverageStyle(count) {
+    if (count === null) return null
+    if (count > 5000) return { bg: '#FEF3C7', color: '#92400E', label: 'Très large', icon: '🌍' }
+    if (count > 500) return { bg: '#DBEAFE', color: '#1E40AF', label: 'Large', icon: '🚗' }
+    if (count > 50) return { bg: '#D1FAE5', color: '#065F46', label: 'Moyen', icon: '🎯' }
+    return { bg: '#F3F4F6', color: '#374151', label: 'Précis', icon: '🔬' }
   }
+
+  const coverage = coverageStyle(vehicleCount)
 
   return (
     <div className="page">
@@ -443,6 +497,7 @@ export default function Rules() {
         </div>
       </div>
 
+      {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal" style={{ maxWidth: 720 }}>
@@ -453,49 +508,54 @@ export default function Rules() {
             <div className="modal-body">
 
               <div className="section-label">Type d'entretien</div>
-              <div className="form-group">
+              <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Type d'entretien *</div>
-                <select value={form.maintenance_type_id} onChange={e => setField('maintenance_type_id', e.target.value)}>
+                <select value={form.maintenance_type_id} onChange={e => setField('maintenance_type_id', e.target.value)}
+                  style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: 13 }}>
                   <option value="">Sélectionner...</option>
                   {types.map(t => <option key={t.id} value={t.id}>{t.code} — {t.name}</option>)}
                 </select>
               </div>
 
-              <div className="section-label" style={{ marginTop: 20 }}>
+              <div className="section-label" style={{ marginTop: 8 }}>
                 Critères de ciblage
                 <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11 }}> — laisser vide = s'applique à tous</span>
               </div>
 
-              <div className="form-row form-row-2" style={{ marginBottom: 16 }}>
+              {/* Années */}
+              <div className="form-row form-row-2" style={{ marginBottom: 0 }}>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Année de</div>
-                  <select value={form.year_from} onChange={e => setField('year_from', e.target.value)}>
+                  <select value={form.year_from} onChange={e => setField('year_from', e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: 13, marginBottom: 16 }}>
                     <option value="">Toutes</option>
                     {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Année à</div>
-                  <select value={form.year_to} onChange={e => setField('year_to', e.target.value)}>
+                  <select value={form.year_to} onChange={e => setField('year_to', e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--gray-300)', borderRadius: 6, fontSize: 13, marginBottom: 16 }}>
                     <option value="">Toutes</option>
                     {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
               </div>
 
+              {/* Marques */}
               <TagSelector
-                label={`Marques${loadingMakes ? '' : ` (${allMakes.length} disponibles — cars, trucks, VUS)`}`}
-                options={allMakes}
+                label={`Marques${loadingMakes ? '' : ` (${availableMakes.length} disponibles)`}`}
+                options={availableMakes}
                 selected={form.makes}
                 onChange={val => setField('makes', val)}
                 loading={loadingMakes}
-                placeholder="Chargement..."
                 hint={form.makes.length === 0 ? 'Vide = toutes les marques' : null}
               />
 
+              {/* Modèles */}
               <TagSelector
                 label={form.makes.length > 0
-                  ? `Modèles${loadingModels ? ' (chargement...)' : ` (${availableModels.length} disponibles — cars, trucks, VUS)`}`
+                  ? `Modèles${loadingModels ? '' : ` (${availableModels.length} disponibles)`}`
                   : 'Modèles'}
                 options={availableModels}
                 selected={form.models}
@@ -506,49 +566,71 @@ export default function Rules() {
                 hint={form.makes.length > 0 && form.models.length === 0 ? `Vide = tous les modèles de ${form.makes.join(', ')}` : null}
               />
 
-              <div className="form-row form-row-3" style={{ marginBottom: 16 }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Transmission</div>
-                  <select value={form.transmission} onChange={e => setField('transmission', e.target.value)}>
-                    <option value="">Toutes</option>
-                    {TRANSMISSION_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Propulsion</div>
-                  <select value={form.drive_type} onChange={e => setField('drive_type', e.target.value)}>
-                    <option value="">Toutes</option>
-                    {DRIVE_TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Carburant</div>
-                  <select value={form.fuel_type} onChange={e => setField('fuel_type', e.target.value)}>
-                    <option value="">Tous</option>
-                    {FUEL_TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
+              {/* Transmission, Propulsion, Carburant — filtrés dynamiquement */}
+              <div className="form-row form-row-3" style={{ marginBottom: 0 }}>
+                <SingleTagSelector
+                  label={`Transmission${loadingDetails ? '' : availableTransmissions.length > 0 ? ` (${availableTransmissions.length})` : ''}`}
+                  options={availableTransmissions.length > 0 ? availableTransmissions : TRANSMISSION_OPTIONS}
+                  value={form.transmission}
+                  onChange={val => setField('transmission', val)}
+                  loading={loadingDetails}
+                  hint="Vide = toutes"
+                />
+                <SingleTagSelector
+                  label={`Propulsion${loadingDetails ? '' : availableDrives.length > 0 ? ` (${availableDrives.length})` : ''}`}
+                  options={availableDrives.length > 0 ? availableDrives : DRIVE_TYPE_OPTIONS}
+                  value={form.drive_type}
+                  onChange={val => setField('drive_type', val)}
+                  loading={loadingDetails}
+                  hint="Vide = toutes"
+                />
+                <SingleTagSelector
+                  label={`Carburant${loadingDetails ? '' : availableFuels.length > 0 ? ` (${availableFuels.length})` : ''}`}
+                  options={availableFuels.length > 0 ? availableFuels : FUEL_TYPE_OPTIONS}
+                  value={form.fuel_type}
+                  onChange={val => setField('fuel_type', val)}
+                  loading={loadingDetails}
+                  hint="Vide = tous"
+                />
               </div>
 
-              {vehicleCount && (
+              {/* Moteur */}
+              <SingleTagSelector
+                label={`Moteur${loadingDetails ? '' : availableEngines.length > 0 ? ` (${availableEngines.length} cylindrées disponibles)` : ''}`}
+                options={availableEngines}
+                value={form.engine}
+                onChange={val => setField('engine', val)}
+                loading={loadingDetails}
+                hint="Vide = tous les moteurs"
+              />
+
+              {/* Compteur de couverture */}
+              {vehicleCount !== null && coverage && (
                 <div style={{
-                  background: coverageStyle(vehicleCount.label).bg,
-                  border: `1px solid ${coverageStyle(vehicleCount.label).color}40`,
+                  background: coverage.bg,
+                  border: `1px solid ${coverage.color}40`,
                   borderRadius: 8, padding: '10px 14px', marginBottom: 16,
                   display: 'flex', alignItems: 'center', gap: 10
                 }}>
-                  <span style={{ fontSize: 20 }}>{coverageStyle(vehicleCount.label).icon}</span>
+                  <span style={{ fontSize: 20 }}>{coverage.icon}</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: coverageStyle(vehicleCount.label).color }}>
-                      Couverture estimée : {vehicleCount.label}
+                    <div style={{ fontSize: 13, fontWeight: 600, color: coverage.color }}>
+                      Couverture : {coverage.label} — {vehicleCount.toLocaleString()} combinaisons véhicules
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--gray-600)' }}>
-                      Cette règle s'appliquera à environ {vehicleCount.min.toLocaleString()} – {vehicleCount.max.toLocaleString()} véhicules
+                      Nombre exact de configurations dans la base de données
                     </div>
                   </div>
                 </div>
               )}
 
+              {vehicleCount === 0 && (
+                <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+                  ⚠️ Aucun véhicule ne correspond à ces critères — vérifiez vos sélections.
+                </div>
+              )}
+
+              {/* Intervalles */}
               <div className="section-label">Intervalles et prix</div>
               <div className="form-row form-row-4" style={{ marginBottom: 12 }}>
                 <div>
