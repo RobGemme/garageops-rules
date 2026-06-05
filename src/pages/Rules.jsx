@@ -1,22 +1,142 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import {
-  DRIVE_TYPE_OPTIONS, TRANSMISSION_OPTIONS, FUEL_TYPE_OPTIONS
-} from '../lib/rules-engine'
+import { DRIVE_TYPE_OPTIONS, TRANSMISSION_OPTIONS, FUEL_TYPE_OPTIONS } from '../lib/rules-engine'
 
 const EMPTY_RULE = {
   maintenance_type_id: '',
   year_from: '', year_to: '',
-  make: '', model: '', engine: '',
+  makes: [],      // tableau de marques
+  models: [],     // tableau de modèles
+  engine: '',
   transmission: '', drive_type: '', fuel_type: '',
   initial_months: '', initial_km: '',
   repeat_months: '', repeat_km: '',
   price: '', notes: ''
 }
 
-// Années disponibles 1995 → année courante + 1
 const YEARS = Array.from({ length: new Date().getFullYear() - 1994 + 1 }, (_, i) => 1995 + i).reverse()
 
+// --- Composant Tag Selector ---
+function TagSelector({ label, options, selected, onChange, disabled, loading, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handle(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  const filtered = options.filter(o => o.toLowerCase().includes(search.toLowerCase()))
+
+  function toggle(val) {
+    if (selected.includes(val)) onChange(selected.filter(s => s !== val))
+    else onChange([...selected, val])
+  }
+
+  function removeTag(val, e) {
+    e.stopPropagation()
+    onChange(selected.filter(s => s !== val))
+  }
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>
+        {label}
+        {loading && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
+      </label>
+      <div
+        onClick={() => !disabled && setOpen(!open)}
+        style={{
+          minHeight: 38,
+          border: `1px solid ${open ? 'var(--blue)' : 'var(--gray-300)'}`,
+          borderRadius: 6,
+          padding: '4px 8px',
+          background: disabled ? 'var(--gray-50)' : 'white',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 4,
+          alignItems: 'center',
+          boxShadow: open ? '0 0 0 3px rgba(37,99,235,0.08)' : 'none',
+          transition: 'border-color 0.15s',
+        }}
+      >
+        {selected.length === 0 && (
+          <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>{disabled ? placeholder : 'Tous (cliquer pour filtrer)'}</span>
+        )}
+        {selected.map(tag => (
+          <span key={tag} style={{
+            background: 'var(--blue-light)', color: 'var(--blue)',
+            border: '1px solid var(--blue-border)', borderRadius: 20,
+            fontSize: 12, fontWeight: 600, padding: '2px 8px',
+            display: 'flex', alignItems: 'center', gap: 4
+          }}>
+            {tag}
+            <span onClick={(e) => removeTag(tag, e)} style={{ cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</span>
+          </span>
+        ))}
+      </div>
+
+      {open && !disabled && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 200,
+          background: 'white', border: '1px solid var(--gray-200)',
+          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+          marginTop: 4, maxHeight: 240, display: 'flex', flexDirection: 'column'
+        }}>
+          <div style={{ padding: '8px 8px 4px' }}>
+            <input
+              autoFocus
+              placeholder="Rechercher..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', padding: '6px 10px', fontSize: 13, border: '1px solid var(--gray-200)', borderRadius: 6 }}
+            />
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '12px 12px', fontSize: 13, color: 'var(--gray-400)' }}>Aucun résultat</div>
+            ) : filtered.map(opt => (
+              <div
+                key={opt}
+                onClick={() => toggle(opt)}
+                style={{
+                  padding: '8px 12px', fontSize: 13, cursor: 'pointer',
+                  background: selected.includes(opt) ? 'var(--blue-light)' : 'transparent',
+                  color: selected.includes(opt) ? 'var(--blue)' : 'var(--gray-900)',
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  fontWeight: selected.includes(opt) ? 600 : 400,
+                }}
+                onMouseEnter={e => { if (!selected.includes(opt)) e.currentTarget.style.background = 'var(--gray-50)' }}
+                onMouseLeave={e => { if (!selected.includes(opt)) e.currentTarget.style.background = 'transparent' }}
+              >
+                <span style={{
+                  width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                  border: `2px solid ${selected.includes(opt) ? 'var(--blue)' : 'var(--gray-300)'}`,
+                  background: selected.includes(opt) ? 'var(--blue)' : 'white',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, color: 'white'
+                }}>{selected.includes(opt) ? '✓' : ''}</span>
+                {opt}
+              </div>
+            ))}
+          </div>
+          {selected.length > 0 && (
+            <div style={{ padding: '8px 12px', borderTop: '1px solid var(--gray-100)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--gray-500)' }}>{selected.length} sélectionné{selected.length > 1 ? 's' : ''}</span>
+              <button onClick={e => { e.stopPropagation(); onChange([]) }} style={{ fontSize: 12, color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer' }}>Tout effacer</button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --- Page principale ---
 export default function Rules() {
   const [rules, setRules] = useState([])
   const [types, setTypes] = useState([])
@@ -29,121 +149,84 @@ export default function Rules() {
   const [search, setSearch] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
-  // Dropdowns en cascade
-  const [makes, setMakes] = useState([])
-  const [models, setModels] = useState([])
-  const [engines, setEngines] = useState([])
+  // Données NHTSA
+  const [allMakes, setAllMakes] = useState([])
+  const [availableModels, setAvailableModels] = useState([])
   const [loadingMakes, setLoadingMakes] = useState(false)
   const [loadingModels, setLoadingModels] = useState(false)
-  const [loadingEngines, setLoadingEngines] = useState(false)
+  const [vehicleCount, setVehicleCount] = useState(null)
+  const [countingVehicles, setCountingVehicles] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
-  // Charger les marques quand les années changent
-  useEffect(() => {
-    if (form.year_from || form.year_to) {
-      loadMakes()
-    } else {
-      loadAllMakes()
-    }
-  }, [form.year_from, form.year_to])
+  // Charger toutes les marques au montage
+  useEffect(() => { loadAllMakes() }, [])
 
-  // Charger les modèles quand la marque change
+  // Recharger les modèles quand les marques ou années changent
   useEffect(() => {
-    if (form.make) {
-      loadModels()
-    } else {
-      setModels([])
-      setEngines([])
-    }
-  }, [form.make, form.year_from, form.year_to])
+    if (form.makes.length > 0) loadModelsForMakes()
+    else setAvailableModels([])
+  }, [form.makes, form.year_from, form.year_to])
 
-  // Charger les moteurs quand le modèle change
+  // Estimer le nombre de véhicules couverts
   useEffect(() => {
-    if (form.make && form.model) {
-      loadEngines()
-    } else {
-      setEngines([])
-    }
-  }, [form.model])
+    estimateVehicleCount()
+  }, [form.makes, form.models, form.year_from, form.year_to, form.transmission, form.fuel_type, form.drive_type])
 
   async function loadAllMakes() {
     setLoadingMakes(true)
     try {
       const res = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json')
       const data = await res.json()
-      const sorted = (data.Results || [])
-        .map(m => m.MakeName)
-        .filter(Boolean)
-        .sort()
-      setMakes(sorted)
-    } catch (e) {
-      setMakes([])
-    }
+      const sorted = [...new Set((data.Results || []).map(m => m.MakeName).filter(Boolean))].sort()
+      setAllMakes(sorted)
+    } catch (e) { setAllMakes([]) }
     setLoadingMakes(false)
   }
 
-  async function loadMakes() {
-    setLoadingMakes(true)
-    const year = form.year_from || form.year_to
-    try {
-      const res = await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/car?format=json`)
-      const data = await res.json()
-      const sorted = (data.Results || [])
-        .map(m => m.MakeName)
-        .filter(Boolean)
-        .sort()
-      setMakes(sorted)
-    } catch (e) {
-      setMakes([])
-    }
-    setLoadingMakes(false)
-  }
-
-  async function loadModels() {
+  async function loadModelsForMakes() {
+    if (form.makes.length === 0) return
     setLoadingModels(true)
-    setModels([])
-    setEngines([])
     const year = form.year_from || form.year_to
     try {
-      let url
-      if (year) {
-        url = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(form.make)}/modelyear/${year}/vehicleType/car?format=json`
-      } else {
-        url = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(form.make)}?format=json`
-      }
-      const res = await fetch(url)
-      const data = await res.json()
-      const sorted = [...new Set((data.Results || []).map(m => m.Model_Name).filter(Boolean))].sort()
-      setModels(sorted)
-    } catch (e) {
-      setModels([])
-    }
+      const promises = form.makes.map(make => {
+        const url = year
+          ? `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}/vehicleType/car?format=json`
+          : `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`
+        return fetch(url).then(r => r.json()).then(d => (d.Results || []).map(m => m.Model_Name).filter(Boolean))
+      })
+      const results = await Promise.all(promises)
+      const allModels = [...new Set(results.flat())].sort()
+      setAvailableModels(allModels)
+      // Retirer les modèles sélectionnés qui ne sont plus disponibles
+      setForm(f => ({ ...f, models: f.models.filter(m => allModels.includes(m)) }))
+    } catch (e) { setAvailableModels([]) }
     setLoadingModels(false)
   }
 
-  async function loadEngines() {
-    setLoadingEngines(true)
-    setEngines([])
-    const year = form.year_from || form.year_to
+  async function estimateVehicleCount() {
+    // Estimation basée sur les critères sélectionnés
+    setCountingVehicles(true)
     try {
-      // On utilise DecodeVinValues pour trouver les variantes de moteur
-      // Mais NHTSA n'a pas d'endpoint direct pour ça — on utilise GetModelsForMakeYear avec détails
-      let url
-      if (year) {
-        url = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(form.make)}/modelyear/${year}/vehicleType/car?format=json`
-      } else {
-        url = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(form.make)}?format=json`
+      const yearFrom = parseInt(form.year_from) || 1995
+      const yearTo = parseInt(form.year_to) || new Date().getFullYear()
+      const nbYears = yearTo - yearFrom + 1
+
+      if (form.makes.length === 0 && form.models.length === 0) {
+        // Règle très large — estimation globale
+        const multiplier = nbYears * 50 // ~50 modèles/marques par année en moyenne
+        setVehicleCount({ min: multiplier * 8, max: multiplier * 15, label: 'Très large' })
+      } else if (form.makes.length > 0 && form.models.length === 0) {
+        // Par marque seulement
+        const count = form.makes.length * nbYears * 8
+        setVehicleCount({ min: count, max: count * 3, label: 'Large' })
+      } else if (form.models.length > 0) {
+        // Par modèle précis
+        const count = form.models.length * nbYears
+        setVehicleCount({ min: count, max: count * 4, label: form.models.length > 3 ? 'Moyen' : 'Précis' })
       }
-      const res = await fetch(url)
-      const data = await res.json()
-      // NHTSA ne retourne pas les moteurs par modèle directement
-      // On offre des options communes basées sur le type de véhicule
-      setEngines(['1.0L', '1.3L', '1.4L', '1.5L', '1.6L', '1.8L', '2.0L', '2.4L', '2.5L', '3.0L', '3.5L', '3.6L', '4.0L', '4.6L', '5.0L', '5.3L', '5.7L', '6.2L', 'Électrique'])
-    } catch (e) {
-      setEngines([])
-    }
-    setLoadingEngines(false)
+    } catch (e) { setVehicleCount(null) }
+    setCountingVehicles(false)
   }
 
   async function loadData() {
@@ -160,11 +243,9 @@ export default function Rules() {
   function openNew() {
     setEditing(null)
     setForm(EMPTY_RULE)
-    setMakes([])
-    setModels([])
-    setEngines([])
+    setAvailableModels([])
+    setVehicleCount(null)
     setShowModal(true)
-    loadAllMakes()
   }
 
   function openEdit(rule) {
@@ -173,8 +254,8 @@ export default function Rules() {
       maintenance_type_id: rule.maintenance_type_id || '',
       year_from: rule.year_from || '',
       year_to: rule.year_to || '',
-      make: rule.make || '',
-      model: rule.model || '',
+      makes: rule.makes || [],
+      models: rule.models || [],
       engine: rule.engine || '',
       transmission: rule.transmission || '',
       drive_type: rule.drive_type || '',
@@ -187,16 +268,13 @@ export default function Rules() {
       notes: rule.notes || ''
     })
     setShowModal(true)
-    loadAllMakes()
   }
 
   function setField(key, val) {
-    if (key === 'make') {
-      setForm(f => ({ ...f, make: val, model: '', engine: '' }))
-    } else if (key === 'model') {
-      setForm(f => ({ ...f, model: val, engine: '' }))
+    if (key === 'makes') {
+      setForm(f => ({ ...f, makes: val, models: [] }))
     } else if (key === 'year_from' || key === 'year_to') {
-      setForm(f => ({ ...f, [key]: val, make: '', model: '', engine: '' }))
+      setForm(f => ({ ...f, [key]: val, models: [] }))
     } else {
       setForm(f => ({ ...f, [key]: val }))
     }
@@ -209,8 +287,10 @@ export default function Rules() {
       maintenance_type_id: form.maintenance_type_id,
       year_from: form.year_from ? parseInt(form.year_from) : null,
       year_to: form.year_to ? parseInt(form.year_to) : null,
-      make: form.make || null,
-      model: form.model || null,
+      makes: form.makes.length > 0 ? form.makes : null,
+      models: form.models.length > 0 ? form.models : null,
+      make: form.makes.length === 1 ? form.makes[0] : null, // compatibilité
+      model: form.models.length === 1 ? form.models[0] : null,
       engine: form.engine || null,
       transmission: form.transmission || null,
       drive_type: form.drive_type || null,
@@ -242,8 +322,8 @@ export default function Rules() {
   function getScore(rule) {
     let s = 0
     if (rule.year_from || rule.year_to) s += 2
-    if (rule.make) s += 3
-    if (rule.model) s += 4
+    if (rule.makes?.length > 0 || rule.make) s += 3
+    if (rule.models?.length > 0 || rule.model) s += 4
     if (rule.transmission) s += 2
     if (rule.drive_type) s += 2
     if (rule.fuel_type) s += 2
@@ -254,8 +334,10 @@ export default function Rules() {
   function describeRule(rule) {
     const parts = []
     if (rule.year_from || rule.year_to) parts.push(`${rule.year_from || '?'}–${rule.year_to || '?'}`)
-    if (rule.make) parts.push(rule.make)
-    if (rule.model) parts.push(rule.model)
+    const makes = rule.makes?.length > 0 ? rule.makes : (rule.make ? [rule.make] : [])
+    const models = rule.models?.length > 0 ? rule.models : (rule.model ? [rule.model] : [])
+    if (makes.length > 0) parts.push(makes.join(', '))
+    if (models.length > 0) parts.push(models.join(', '))
     if (rule.transmission) parts.push(rule.transmission)
     if (rule.drive_type) parts.push(rule.drive_type)
     if (rule.fuel_type) parts.push(rule.fuel_type)
@@ -266,12 +348,18 @@ export default function Rules() {
     if (filterType && r.maintenance_type_id !== filterType) return false
     if (search) {
       const q = search.toLowerCase()
-      const desc = describeRule(r).toLowerCase()
-      const name = r.maintenance_types?.name?.toLowerCase() || ''
-      if (!desc.includes(q) && !name.includes(q)) return false
+      if (!describeRule(r).toLowerCase().includes(q) && !r.maintenance_types?.name?.toLowerCase().includes(q)) return false
     }
     return true
   })
+
+  // Couleur du badge de couverture
+  function coverageColor(label) {
+    if (label === 'Très large') return { bg: '#FEF3C7', color: '#92400E' }
+    if (label === 'Large') return { bg: '#DBEAFE', color: '#1E40AF' }
+    if (label === 'Moyen') return { bg: '#D1FAE5', color: '#065F46' }
+    return { bg: '#F3F4F6', color: '#374151' }
+  }
 
   return (
     <div className="page">
@@ -331,16 +419,12 @@ export default function Rules() {
                     <td><span className="badge badge-gray">{describeRule(rule)}</span></td>
                     <td>
                       {rule.initial_months || rule.initial_km ? (
-                        <span className="mono">
-                          {rule.initial_months ? `${rule.initial_months}m` : '—'} / {rule.initial_km ? `${rule.initial_km.toLocaleString()}km` : '—'}
-                        </span>
+                        <span className="mono">{rule.initial_months ? `${rule.initial_months}m` : '—'} / {rule.initial_km ? `${rule.initial_km.toLocaleString()}km` : '—'}</span>
                       ) : <span style={{ color: 'var(--gray-300)' }}>—</span>}
                     </td>
                     <td>
                       {rule.repeat_months || rule.repeat_km ? (
-                        <span className="mono">
-                          {rule.repeat_months ? `${rule.repeat_months}m` : '—'} / {rule.repeat_km ? `${rule.repeat_km.toLocaleString()}km` : '—'}
-                        </span>
+                        <span className="mono">{rule.repeat_months ? `${rule.repeat_months}m` : '—'} / {rule.repeat_km ? `${rule.repeat_km.toLocaleString()}km` : '—'}</span>
                       ) : <span style={{ color: 'var(--gray-300)' }}>—</span>}
                     </td>
                     <td>{rule.price ? <span style={{ fontWeight: 600 }}>{parseFloat(rule.price).toFixed(2)} $</span> : <span style={{ color: 'var(--gray-300)' }}>—</span>}</td>
@@ -359,10 +443,10 @@ export default function Rules() {
         </div>
       </div>
 
-      {/* Modal création/édition */}
+      {/* Modal */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal">
+          <div className="modal" style={{ maxWidth: 720 }}>
             <div className="modal-header">
               <h2 className="modal-title">{editing ? 'Modifier la règle' : 'Nouvelle règle'}</h2>
               <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
@@ -379,14 +463,14 @@ export default function Rules() {
                 </select>
               </div>
 
-              {/* Critères en cascade */}
+              {/* Critères */}
               <div className="section-label" style={{ marginTop: 20 }}>
                 Critères de ciblage
                 <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11 }}> — laisser vide = s'applique à tous</span>
               </div>
 
               {/* Années */}
-              <div className="form-row form-row-2" style={{ marginBottom: 12 }}>
+              <div className="form-row form-row-2" style={{ marginBottom: 16 }}>
                 <div>
                   <label>Année de</label>
                   <select value={form.year_from} onChange={e => setField('year_from', e.target.value)}>
@@ -403,46 +487,37 @@ export default function Rules() {
                 </div>
               </div>
 
-              {/* Marque — se peuple via NHTSA */}
+              {/* Marques — tags multiples */}
               <div className="form-group">
-                <label>
-                  Marque
-                  {loadingMakes && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
-                </label>
-                <select value={form.make} onChange={e => setField('make', e.target.value)} disabled={loadingMakes}>
-                  <option value="">Toutes les marques</option>
-                  {makes.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                {makes.length > 0 && <div className="form-hint">{makes.length} marques disponibles</div>}
+                <TagSelector
+                  label={`Marques${loadingMakes ? '' : ` (${allMakes.length} disponibles)`}`}
+                  options={allMakes}
+                  selected={form.makes}
+                  onChange={val => setField('makes', val)}
+                  loading={loadingMakes}
+                  placeholder="Chargement..."
+                />
+                {form.makes.length === 0 && <div className="form-hint">Vide = toutes les marques</div>}
               </div>
 
-              {/* Modèle — se peuple quand marque sélectionnée */}
+              {/* Modèles — tags multiples, filtrés par marques */}
               <div className="form-group">
-                <label>
-                  Modèle
-                  {loadingModels && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
-                </label>
-                <select value={form.model} onChange={e => setField('model', e.target.value)} disabled={!form.make || loadingModels}>
-                  <option value="">{form.make ? 'Tous les modèles' : 'Sélectionnez une marque d\'abord'}</option>
-                  {models.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-                {form.make && models.length > 0 && <div className="form-hint">{models.length} modèles disponibles pour {form.make}</div>}
-              </div>
-
-              {/* Moteur — se peuple quand modèle sélectionné */}
-              <div className="form-group">
-                <label>
-                  Moteur
-                  {loadingEngines && <span className="spinner" style={{ width: 12, height: 12, marginLeft: 6 }} />}
-                </label>
-                <select value={form.engine} onChange={e => setField('engine', e.target.value)} disabled={!form.model || loadingEngines}>
-                  <option value="">{form.model ? 'Tous les moteurs' : 'Sélectionnez un modèle d\'abord'}</option>
-                  {engines.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
+                <TagSelector
+                  label={form.makes.length > 0
+                    ? `Modèles${loadingModels ? '' : ` (${availableModels.length} disponibles pour ${form.makes.join(', ')})`}`
+                    : 'Modèles'}
+                  options={availableModels}
+                  selected={form.models}
+                  onChange={val => setField('models', val)}
+                  loading={loadingModels}
+                  disabled={form.makes.length === 0}
+                  placeholder="Sélectionnez une marque d'abord"
+                />
+                {form.makes.length > 0 && form.models.length === 0 && <div className="form-hint">Vide = tous les modèles de {form.makes.join(', ')}</div>}
               </div>
 
               {/* Transmission, Propulsion, Carburant */}
-              <div className="form-row form-row-3" style={{ marginBottom: 12 }}>
+              <div className="form-row form-row-3" style={{ marginBottom: 16 }}>
                 <div>
                   <label>Transmission</label>
                   <select value={form.transmission} onChange={e => setField('transmission', e.target.value)}>
@@ -466,8 +541,28 @@ export default function Rules() {
                 </div>
               </div>
 
+              {/* Compteur de véhicules couverts */}
+              {vehicleCount && (
+                <div style={{
+                  background: coverageColor(vehicleCount.label).bg,
+                  border: `1px solid ${coverageColor(vehicleCount.label).color}30`,
+                  borderRadius: 8, padding: '10px 14px', marginBottom: 16,
+                  display: 'flex', alignItems: 'center', gap: 10
+                }}>
+                  <span style={{ fontSize: 18 }}>🚗</span>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: coverageColor(vehicleCount.label).color }}>
+                      Couverture estimée : {vehicleCount.label}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--gray-600)' }}>
+                      Cette règle s'appliquera à environ {vehicleCount.min.toLocaleString()}–{vehicleCount.max.toLocaleString()} véhicules
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Intervalles */}
-              <div className="section-label" style={{ marginTop: 20 }}>Intervalles et prix</div>
+              <div className="section-label" style={{ marginTop: 4 }}>Intervalles et prix</div>
               <div className="form-row form-row-4" style={{ marginBottom: 12 }}>
                 <div>
                   <label>Initial — Mois</label>
@@ -486,7 +581,6 @@ export default function Rules() {
                   <input type="number" placeholder="ex: 20000" value={form.repeat_km} onChange={e => setField('repeat_km', e.target.value)} />
                 </div>
               </div>
-
               <div className="form-row form-row-2">
                 <div>
                   <label>Prix ($)</label>
@@ -514,12 +608,8 @@ export default function Rules() {
       {deleteConfirm && (
         <div className="modal-overlay">
           <div className="modal" style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h2 className="modal-title">Supprimer la règle?</h2>
-            </div>
-            <div className="modal-body">
-              <p style={{ color: 'var(--gray-600)' }}>Cette action est irréversible.</p>
-            </div>
+            <div className="modal-header"><h2 className="modal-title">Supprimer la règle?</h2></div>
+            <div className="modal-body"><p style={{ color: 'var(--gray-600)' }}>Cette action est irréversible.</p></div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>Annuler</button>
               <button className="btn btn-danger" onClick={() => deleteRule(deleteConfirm)}>Supprimer</button>
