@@ -11,6 +11,10 @@ export const DRIVE_TYPE_MAP = {
   'All-Wheel Drive/4-Wheel Drive': 'AWD',
   '4WD/AWD': 'AWD',
   '2-Wheel Drive': '2WD',
+  '4WD/4-Wheel Drive/4x4': '4WD',
+  'AWD/All-Wheel Drive': 'AWD',
+  'RWD/Rear-Wheel Drive': 'RWD',
+  'FWD/Front-Wheel Drive': 'FWD',
 }
 
 export const TRANSMISSION_MAP = {
