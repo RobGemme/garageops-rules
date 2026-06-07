@@ -1,7 +1,6 @@
 // ================================================
 // Normalisation des valeurs NHTSA → GarageOps
 // ================================================
-// Ajouter de nouvelles valeurs ici au fur et à mesure
 
 export const DRIVE_TYPE_MAP = {
   'Front-Wheel Drive': 'FWD',
@@ -28,14 +27,13 @@ export const FUEL_TYPE_MAP = {
   'Gasoline': 'GASOLINE',
   'Diesel': 'DIESEL',
   'Electric': 'ELECTRIC',
-  'Flex-Fuel (E85)': 'FLEX',
+  'Flex-Fuel (E85)': 'GASOLINE',
   'Gasoline/Electric Hybrid': 'HYBRID',
   'Plug-in Electric/Gasoline': 'PHEV',
   'Natural Gas': 'CNG',
   'Hydrogen': 'HYDROGEN',
 }
 
-// Valeurs disponibles dans les dropdowns de création de règles
 export const DRIVE_TYPE_OPTIONS = ['FWD', 'RWD', 'AWD', '4WD', '2WD']
 export const TRANSMISSION_OPTIONS = ['AUTO', 'MANUAL', 'CVT', 'DCT', 'AMT', 'SEMI-AUTO']
 export const FUEL_TYPE_OPTIONS = ['GASOLINE', 'DIESEL', 'HYBRID', 'PHEV', 'ELECTRIC', 'FLEX', 'CNG']
@@ -45,11 +43,10 @@ export function normalizeVehicle(nhtsaResult) {
     year: parseInt(nhtsaResult.ModelYear) || null,
     make: nhtsaResult.Make || null,
     model: nhtsaResult.Model || null,
-    engine: nhtsaResult.DisplacementL ? `${nhtsaResult.DisplacementL}L` : null,
+    engine: nhtsaResult.DisplacementL ? `${parseFloat(nhtsaResult.DisplacementL).toFixed(1)}L` : null,
     transmission: TRANSMISSION_MAP[nhtsaResult.TransmissionStyle] || nhtsaResult.TransmissionStyle || null,
     drive_type: DRIVE_TYPE_MAP[nhtsaResult.DriveType] || nhtsaResult.DriveType || null,
     fuel_type: FUEL_TYPE_MAP[nhtsaResult.FuelTypePrimary] || nhtsaResult.FuelTypePrimary || null,
-    // Données brutes pour affichage
     raw: {
       transmission: nhtsaResult.TransmissionStyle,
       drive_type: nhtsaResult.DriveType,
@@ -61,7 +58,9 @@ export function normalizeVehicle(nhtsaResult) {
   }
 }
 
-// Moteur de règles — trouve et classe les règles applicables
+// ================================================
+// Moteur de règles — matching avec support tableaux
+// ================================================
 export function matchRules(vehicle, rules) {
   const matched = []
 
@@ -69,47 +68,61 @@ export function matchRules(vehicle, rules) {
     let score = 0
     let matches = true
 
-    // Année
+    // --- Année ---
     if (rule.year_from || rule.year_to) {
       const from = rule.year_from || 0
       const to = rule.year_to || 9999
-      if (vehicle.year < from || vehicle.year > to) { matches = false; continue }
+      if (!vehicle.year || vehicle.year < from || vehicle.year > to) { matches = false; continue }
       score += 2
     }
 
-    // Marque
-    if (rule.make) {
-      if (vehicle.make?.toUpperCase() !== rule.make.toUpperCase()) { matches = false; continue }
+    // --- Marque (supporte makes[] et make) ---
+    const makes = rule.makes?.length > 0 ? rule.makes : (rule.make ? [rule.make] : [])
+    if (makes.length > 0) {
+      if (!vehicle.make) { matches = false; continue }
+      const vehicleMakeUp = vehicle.make.toUpperCase()
+      if (!makes.some(m => m.toUpperCase() === vehicleMakeUp)) { matches = false; continue }
       score += 3
     }
 
-    // Modèle
-    if (rule.model) {
-      if (vehicle.model?.toUpperCase() !== rule.model.toUpperCase()) { matches = false; continue }
+    // --- Modèle (supporte models[] et model) ---
+    const models = rule.models?.length > 0 ? rule.models : (rule.model ? [rule.model] : [])
+    if (models.length > 0) {
+      if (!vehicle.model) { matches = false; continue }
+      const vehicleModelUp = vehicle.model.toUpperCase()
+      if (!models.some(m => m.toUpperCase() === vehicleModelUp)) { matches = false; continue }
       score += 4
     }
 
-    // Transmission
-    if (rule.transmission) {
-      if (vehicle.transmission !== rule.transmission) { matches = false; continue }
+    // --- Transmission (supporte transmissions[] et transmission) ---
+    const transmissions = rule.transmissions?.length > 0 ? rule.transmissions : (rule.transmission ? [rule.transmission] : [])
+    if (transmissions.length > 0) {
+      if (!vehicle.transmission) { matches = false; continue }
+      if (!transmissions.includes(vehicle.transmission)) { matches = false; continue }
       score += 2
     }
 
-    // Propulsion
-    if (rule.drive_type) {
-      if (vehicle.drive_type !== rule.drive_type) { matches = false; continue }
+    // --- Propulsion (supporte drive_types[] et drive_type) ---
+    const driveTypes = rule.drive_types?.length > 0 ? rule.drive_types : (rule.drive_type ? [rule.drive_type] : [])
+    if (driveTypes.length > 0) {
+      if (!vehicle.drive_type) { matches = false; continue }
+      if (!driveTypes.includes(vehicle.drive_type)) { matches = false; continue }
       score += 2
     }
 
-    // Carburant
-    if (rule.fuel_type) {
-      if (vehicle.fuel_type !== rule.fuel_type) { matches = false; continue }
+    // --- Carburant (supporte fuel_types[] et fuel_type) ---
+    const fuelTypes = rule.fuel_types?.length > 0 ? rule.fuel_types : (rule.fuel_type ? [rule.fuel_type] : [])
+    if (fuelTypes.length > 0) {
+      if (!vehicle.fuel_type) { matches = false; continue }
+      if (!fuelTypes.includes(vehicle.fuel_type)) { matches = false; continue }
       score += 2
     }
 
-    // Moteur
-    if (rule.engine) {
-      if (!vehicle.engine?.includes(rule.engine)) { matches = false; continue }
+    // --- Moteur (supporte engines[] et engine) ---
+    const engines = rule.engines?.length > 0 ? rule.engines : (rule.engine ? [rule.engine] : [])
+    if (engines.length > 0) {
+      if (!vehicle.engine) { matches = false; continue }
+      if (!engines.some(e => vehicle.engine.includes(e.replace('L', '')))) { matches = false; continue }
       score += 1
     }
 
