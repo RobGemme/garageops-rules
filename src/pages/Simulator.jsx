@@ -3,11 +3,9 @@ import { supabase } from '../lib/supabase'
 import { normalizeVehicle, matchRules } from '../lib/rules-engine'
 
 const EXAMPLE_VINS = [
-  { label: 'Ford F-150 2019', vin: '1FTFW1ET5DFC10312' },
-  { label: 'Honda Accord 2003', vin: '1HGCM82633A004352' },
-  { label: 'Tesla Model S', vin: '5YJSA1H10EFP52062' },
-  { label: 'Toyota RAV4 2018', vin: '2T3RFREV1JW856231' },
-  { label: 'Subaru WRX', vin: 'JF1VA2V64H9812345' },
+  { label: 'Subaru Crosstrek', vin: 'JF2GPACC9E8227316' },
+  { label: 'Tesla Model 3', vin: '5YJ3E1EB0LF643193' },
+  { label: 'Silverado HD', vin: '1GC1YNEY3MF251381' },
 ]
 
 export default function Simulator() {
@@ -75,7 +73,6 @@ export default function Simulator() {
         <p className="page-subtitle">Entrez un VIN pour voir quelles règles s'appliquent au véhicule</p>
       </div>
 
-      {/* VIN Input */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-body">
           <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -106,13 +103,10 @@ export default function Simulator() {
 
       {vehicle && (
         <>
-          {/* Fiche véhicule */}
           <div className="card" style={{ marginBottom: 20 }}>
             <div className="card-header">
               <div>
-                <div className="card-title">
-                  {vehicle.year} {vehicle.make} {vehicle.model}
-                </div>
+                <div className="card-title">{vehicle.year} {vehicle.make} {vehicle.model}</div>
                 <div className="card-subtitle">Données décodées via API NHTSA</div>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -124,13 +118,9 @@ export default function Simulator() {
             <div className="card-body">
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
-                  ['Année', vehicle.year],
-                  ['Marque', vehicle.make],
-                  ['Modèle', vehicle.model],
-                  ['Moteur', vehicle.engine],
-                  ['Transmission', vehicle.transmission],
-                  ['Propulsion', vehicle.drive_type],
-                  ['Carburant', vehicle.fuel_type],
+                  ['Année', vehicle.year], ['Marque', vehicle.make], ['Modèle', vehicle.model],
+                  ['Moteur', vehicle.engine], ['Transmission', vehicle.transmission],
+                  ['Propulsion', vehicle.drive_type], ['Carburant', vehicle.fuel_type],
                   ['Puissance', rawNhtsa?.EngineHP ? rawNhtsa.EngineHP + ' HP' : null],
                   ['Carrosserie', rawNhtsa?.BodyClass],
                 ].map(([label, val]) => (
@@ -145,7 +135,6 @@ export default function Simulator() {
             </div>
           </div>
 
-          {/* Résultats */}
           {results && (
             <div className="card">
               <div className="card-header">
@@ -164,13 +153,10 @@ export default function Simulator() {
                       {showAll ? 'Masquer les conflits' : 'Voir tous les conflits'}
                     </button>
                   )}
-                  {!savedSim ? (
-                    <button className="btn btn-secondary btn-sm" onClick={saveSimulation}>
-                      💾 Sauvegarder
-                    </button>
-                  ) : (
-                    <span className="badge badge-green">✓ Sauvegardé</span>
-                  )}
+                  {!savedSim
+                    ? <button className="btn btn-secondary btn-sm" onClick={saveSimulation}>💾 Sauvegarder</button>
+                    : <span className="badge badge-green">✓ Sauvegardé</span>
+                  }
                 </div>
               </div>
 
@@ -185,21 +171,16 @@ export default function Simulator() {
                   <table>
                     <thead>
                       <tr>
-                        <th>Entretien</th>
-                        <th>Règle appliquée</th>
-                        <th>Initial</th>
-                        <th>Répétition</th>
-                        <th>Prix</th>
-                        <th>Score</th>
+                        <th>Entretien</th><th>Règle appliquée</th><th>Initial</th>
+                        <th>Répétition</th><th>Prix</th><th>Score</th>
                         {showAll && <th>Statut</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {displayResults.map((rule, i) => {
+                      {displayResults.map((rule) => {
                         const isBest = results.best.find(b => b.id === rule.id)
-                        const isConflict = !isBest && showAll
                         return (
-                          <tr key={rule.id} className={isConflict ? 'conflict-row' : ''}>
+                          <tr key={rule.id} className={!isBest && showAll ? 'conflict-row' : ''}>
                             <td>
                               <div style={{ fontWeight: 600 }}>{rule.maintenance_types?.code}</div>
                               <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{rule.maintenance_types?.name}</div>
@@ -209,8 +190,10 @@ export default function Simulator() {
                                 {(() => {
                                   const parts = []
                                   if (rule.year_from || rule.year_to) parts.push(`${rule.year_from||'?'}–${rule.year_to||'?'}`)
-                                  if (rule.make) parts.push(rule.make)
-                                  if (rule.model) parts.push(rule.model)
+                                  const makes = rule.makes?.length > 0 ? rule.makes : (rule.make ? [rule.make] : [])
+                                  const models = rule.models?.length > 0 ? rule.models : (rule.model ? [rule.model] : [])
+                                  if (makes.length) parts.push(makes.join(', '))
+                                  if (models.length) parts.push(models.join(', '))
                                   if (rule.transmission) parts.push(rule.transmission)
                                   if (rule.drive_type) parts.push(rule.drive_type)
                                   if (rule.fuel_type) parts.push(rule.fuel_type)
@@ -224,19 +207,10 @@ export default function Simulator() {
                             <td className="mono">
                               {rule.repeat_months ? `${rule.repeat_months}m` : '—'} / {rule.repeat_km ? `${rule.repeat_km.toLocaleString()}km` : '—'}
                             </td>
-                            <td style={{ fontWeight: 600 }}>
-                              {rule.price ? `${parseFloat(rule.price).toFixed(2)} $` : '—'}
-                            </td>
-                            <td>
-                              <span className="score-pill">{rule.score}</span>
-                            </td>
+                            <td style={{ fontWeight: 600 }}>{rule.price ? `${parseFloat(rule.price).toFixed(2)} $` : '—'}</td>
+                            <td><span className="score-pill">{rule.score}</span></td>
                             {showAll && (
-                              <td>
-                                {isBest
-                                  ? <span className="badge badge-green">✓ Retenue</span>
-                                  : <span className="badge badge-orange">⚠ Conflit</span>
-                                }
-                              </td>
+                              <td>{isBest ? <span className="badge badge-green">✓ Retenue</span> : <span className="badge badge-orange">⚠ Conflit</span>}</td>
                             )}
                           </tr>
                         )
