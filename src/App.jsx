@@ -1,9 +1,11 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { Routes, Route, NavLink } from 'react-router-dom'
 import Rules from './pages/Rules.jsx'
 import Simulator from './pages/Simulator.jsx'
 import Report from './pages/Report.jsx'
+import Login from './pages/Login.jsx'
 
-function Topbar() {
+function Topbar({ onLogout }) {
   return (
     <header className="topbar">
       <a href="/" className="topbar-logo">
@@ -15,24 +17,33 @@ function Topbar() {
         <span className="topbar-badge">PROTOTYPE</span>
       </a>
       <nav className="nav">
-        <NavLink to="/" end className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>
-          📋 Règles
-        </NavLink>
-        <NavLink to="/simulateur" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>
-          🔍 Simulateur VIN
-        </NavLink>
-        <NavLink to="/rapport" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>
-          📊 Rapport
-        </NavLink>
+        <NavLink to="/" end className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>📋 Règles</NavLink>
+        <NavLink to="/simulateur" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>🔍 Simulateur VIN</NavLink>
+        <NavLink to="/rapport" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>📊 Rapport</NavLink>
+        <button onClick={onLogout} className="btn btn-secondary btn-sm" style={{ marginLeft: 8 }}>Déconnexion</button>
       </nav>
     </header>
   )
 }
 
 export default function App() {
+  const [loggedIn, setLoggedIn] = useState(() => sessionStorage.getItem('go_auth') === '1')
+
+  function handleLogin() {
+    sessionStorage.setItem('go_auth', '1')
+    setLoggedIn(true)
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem('go_auth')
+    setLoggedIn(false)
+  }
+
+  if (!loggedIn) return <Login onLogin={handleLogin} />
+
   return (
     <div className="app-layout">
-      <Topbar />
+      <Topbar onLogout={handleLogout} />
       <main>
         <Routes>
           <Route path="/" element={<Rules />} />
