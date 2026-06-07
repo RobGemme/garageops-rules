@@ -3,7 +3,7 @@ import { Routes, Route, NavLink } from 'react-router-dom'
 import Rules from './pages/Rules.jsx'
 import Simulator from './pages/Simulator.jsx'
 import Report from './pages/Report.jsx'
-import Login from './pages/Login.jsx'
+import Login from './pages/login.jsx'
 
 function Topbar({ onLogout }) {
   return (
