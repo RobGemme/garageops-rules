@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
+const CATEGORIES = ['AUTO', 'VUS/VAN', 'Camionnette']
+
 const EMPTY_RULE = {
+  product_code: '',
+  categories: [],
   maintenance_type_id: '',
   year_from: '', year_to: '',
   makes: [], models: [],
@@ -81,6 +85,13 @@ function TagSelector({ label, options, selected, onChange, disabled, loading, pl
       )}
     </div>
   )
+}
+
+// --- Category badge color helper ---
+function categoryBadgeColor(cat) {
+  if (cat === 'Camionnette') return { bg: '#FEF3C7', color: '#92400E' }
+  if (cat === 'VUS/VAN') return { bg: '#DBEAFE', color: '#1E40AF' }
+  return { bg: '#D1FAE5', color: '#065F46' } // AUTO
 }
 
 export default function Rules() {
@@ -191,6 +202,8 @@ export default function Rules() {
   function openEdit(rule) {
     setEditing(rule.id)
     setForm({
+      product_code: rule.product_code || '',
+      categories: rule.categories || [],
       maintenance_type_id: rule.maintenance_type_id || '',
       year_from: rule.year_from || '', year_to: rule.year_to || '',
       makes: rule.makes || (rule.make ? [rule.make] : []),
@@ -213,10 +226,19 @@ export default function Rules() {
     else setForm(f => ({ ...f, [key]: val }))
   }
 
+  function toggleCategory(cat) {
+    setForm(f => ({
+      ...f,
+      categories: f.categories.includes(cat) ? f.categories.filter(c => c !== cat) : [...f.categories, cat]
+    }))
+  }
+
   async function saveRule() {
     if (!form.maintenance_type_id) return alert('Sélectionnez un type d\'entretien.')
     setSaving(true)
     const payload = {
+      product_code: form.product_code || null,
+      categories: form.categories.length > 0 ? form.categories : null,
       maintenance_type_id: form.maintenance_type_id,
       year_from: form.year_from ? parseInt(form.year_from) : null,
       year_to: form.year_to ? parseInt(form.year_to) : null,
@@ -253,6 +275,7 @@ export default function Rules() {
 
   function getScore(rule) {
     let s = 0
+    if (rule.categories?.length > 0) s += 3
     if (rule.year_from || rule.year_to) s += 2
     if (rule.makes?.length > 0 || rule.make) s += 3
     if (rule.models?.length > 0 || rule.model) s += 4
@@ -265,6 +288,7 @@ export default function Rules() {
 
   function describeRule(rule) {
     const parts = []
+    if (rule.categories?.length > 0) parts.push(rule.categories.join(', '))
     if (rule.year_from || rule.year_to) parts.push(`${rule.year_from || '?'}–${rule.year_to || '?'}`)
     const makes = rule.makes?.length > 0 ? rule.makes : (rule.make ? [rule.make] : [])
     const models = rule.models?.length > 0 ? rule.models : (rule.model ? [rule.model] : [])
@@ -283,7 +307,9 @@ export default function Rules() {
     if (filterType && r.maintenance_type_id !== filterType) return false
     if (search) {
       const q = search.toLowerCase()
-      if (!describeRule(r).toLowerCase().includes(q) && !r.maintenance_types?.name?.toLowerCase().includes(q)) return false
+      if (!describeRule(r).toLowerCase().includes(q)
+        && !r.maintenance_types?.name?.toLowerCase().includes(q)
+        && !r.product_code?.toLowerCase().includes(q)) return false
     }
     return true
   })
@@ -311,7 +337,7 @@ export default function Rules() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-body" style={{ display: 'flex', gap: 12, padding: '12px 16px' }}>
-          <input placeholder="🔍 Rechercher..." value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 240 }} />
+          <input placeholder="🔍 Rechercher (code, marque, modèle...)" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 280 }} />
           <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ maxWidth: 280 }}>
             <option value="">Tous les types d'entretien</option>
             {types.map(t => <option key={t.id} value={t.id}>{t.code} — {t.name}</option>)}
@@ -335,14 +361,25 @@ export default function Rules() {
           ) : (
             <table>
               <thead>
-                <tr><th>Type d'entretien</th><th>Cible</th><th>Initial</th><th>Répétition</th><th>Prix</th><th>Score</th><th></th></tr>
+                <tr><th>Code</th><th>Type d'entretien</th><th>Catégorie</th><th>Cible</th><th>Initial</th><th>Répétition</th><th>Prix</th><th>Score</th><th></th></tr>
               </thead>
               <tbody>
                 {filtered.map(rule => (
                   <tr key={rule.id}>
+                    <td>{rule.product_code ? <span className="mono" style={{ fontWeight: 600 }}>{rule.product_code}</span> : <span style={{ color: 'var(--gray-300)' }}>—</span>}</td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{rule.maintenance_types?.code}</div>
                       <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{rule.maintenance_types?.name}</div>
+                    </td>
+                    <td>
+                      {rule.categories?.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {rule.categories.map(cat => {
+                            const c = categoryBadgeColor(cat)
+                            return <span key={cat} style={{ background: c.bg, color: c.color, borderRadius: 12, fontSize: 11, fontWeight: 600, padding: '2px 8px' }}>{cat}</span>
+                          })}
+                        </div>
+                      ) : <span style={{ color: 'var(--gray-300)' }}>Tous</span>}
                     </td>
                     <td><span className="badge badge-gray" style={{ whiteSpace: 'normal', maxWidth: 300 }}>{describeRule(rule)}</span></td>
                     <td>{rule.initial_months || rule.initial_km ? <span className="mono">{rule.initial_months ? `${rule.initial_months}m` : '—'} / {rule.initial_km ? `${rule.initial_km.toLocaleString()}km` : '—'}</span> : <span style={{ color: 'var(--gray-300)' }}>—</span>}</td>
@@ -371,6 +408,41 @@ export default function Rules() {
               <button className="modal-close" onClick={() => setShowModal(false)}>✕</button>
             </div>
             <div className="modal-body">
+
+              {/* Code produit + Catégorie de véhicule */}
+              <div className="section-label">Identification</div>
+              <div className="form-row form-row-2" style={{ marginBottom: 16 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Code produit (facture)</div>
+                  <input placeholder="ex: ALI-101" value={form.product_code} onChange={e => setField('product_code', e.target.value)} />
+                  <div className="form-hint" style={{ marginTop: 3 }}>Identifiant que tu donnes à la règle pour la retrouver sur une facture</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-700)', marginBottom: 5 }}>Type de véhicule</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {CATEGORIES.map(cat => {
+                      const active = form.categories.includes(cat)
+                      const c = categoryBadgeColor(cat)
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => toggleCategory(cat)}
+                          style={{
+                            flex: 1, padding: '8px 6px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                            border: active ? `2px solid ${c.color}` : '1px solid var(--gray-300)',
+                            background: active ? c.bg : 'white', color: active ? c.color : 'var(--gray-600)',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {cat}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="form-hint" style={{ marginTop: 3 }}>{form.categories.length === 0 ? 'Vide = toutes les catégories' : `S'applique à : ${form.categories.join(', ')}`}</div>
+                </div>
+              </div>
 
               {/* Type d'entretien */}
               <div className="section-label">Type d'entretien</div>
