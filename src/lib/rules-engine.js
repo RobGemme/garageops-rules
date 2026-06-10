@@ -41,6 +41,7 @@ export const FUEL_TYPE_MAP = {
 export const DRIVE_TYPE_OPTIONS = ['FWD', 'RWD', 'AWD', '4WD', '2WD']
 export const TRANSMISSION_OPTIONS = ['AUTO', 'MANUAL', 'CVT', 'DCT', 'AMT', 'SEMI-AUTO']
 export const FUEL_TYPE_OPTIONS = ['GASOLINE', 'DIESEL', 'HYBRID', 'PHEV', 'ELECTRIC', 'FLEX', 'CNG']
+export const CATEGORY_OPTIONS = ['AUTO', 'VUS/VAN', 'Camionnette']
 
 export function normalizeVehicle(nhtsaResult) {
   return {
@@ -51,6 +52,8 @@ export function normalizeVehicle(nhtsaResult) {
     transmission: TRANSMISSION_MAP[nhtsaResult.TransmissionStyle] || nhtsaResult.TransmissionStyle || null,
     drive_type: DRIVE_TYPE_MAP[nhtsaResult.DriveType] || nhtsaResult.DriveType || null,
     fuel_type: FUEL_TYPE_MAP[nhtsaResult.FuelTypePrimary] || nhtsaResult.FuelTypePrimary || null,
+    // category est ajoutée séparément (lookup table vehicles par make/model/year)
+    category: null,
     raw: {
       transmission: nhtsaResult.TransmissionStyle,
       drive_type: nhtsaResult.DriveType,
@@ -71,6 +74,13 @@ export function matchRules(vehicle, rules) {
   for (const rule of rules) {
     let score = 0
     let matches = true
+
+    // --- Catégorie de véhicule (Auto / VUS-VAN / Camionnette) ---
+    if (rule.categories?.length > 0) {
+      if (!vehicle.category) { matches = false; continue }
+      if (!rule.categories.includes(vehicle.category)) { matches = false; continue }
+      score += 3
+    }
 
     // --- Année ---
     if (rule.year_from || rule.year_to) {
