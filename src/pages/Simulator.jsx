@@ -8,6 +8,13 @@ const EXAMPLE_VINS = [
   { label: 'Silverado HD', vin: '1GC1YNEY3MF251381' },
 ]
 
+function categoryBadgeColor(cat) {
+  if (cat === 'Camionnette') return { bg: '#FEF3C7', color: '#92400E' }
+  if (cat === 'VUS/VAN') return { bg: '#DBEAFE', color: '#1E40AF' }
+  if (cat === 'AUTO') return { bg: '#D1FAE5', color: '#065F46' }
+  return null
+}
+
 export default function Simulator() {
   const [vin, setVin] = useState('')
   const [loading, setLoading] = useState(false)
@@ -37,6 +44,41 @@ export default function Simulator() {
 
   useEffect(() => { loadRules() }, [])
 
+  // Recherche la categorie (AUTO / VUS-VAN / Camionnette) dans la table vehicles
+  // 1) match exact year+make+model, 2) fallback make+model (categorie la plus frequente)
+  async function lookupCategory(year, make, model) {
+    if (!make || !model) return null
+
+    // Tentative 1 : year + make + model exact
+    if (year) {
+      const { data } = await supabase
+        .from('vehicles')
+        .select('category')
+        .eq('year', year)
+        .ilike('make', make)
+        .ilike('model', model)
+        .not('category', 'is', null)
+        .limit(1)
+      if (data && data.length > 0) return data[0].category
+    }
+
+    // Tentative 2 : make + model (toutes annees), categorie la plus frequente
+    const { data } = await supabase
+      .from('vehicles')
+      .select('category')
+      .ilike('make', make)
+      .ilike('model', model)
+      .not('category', 'is', null)
+
+    if (data && data.length > 0) {
+      const counts = {}
+      for (const row of data) counts[row.category] = (counts[row.category] || 0) + 1
+      return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
+    }
+
+    return null
+  }
+
   async function decodeVin() {
     const v = vin.trim().toUpperCase()
     if (v.length < 11) { setError('VIN trop court — minimum 11 caractères.'); return }
@@ -53,6 +95,11 @@ export default function Simulator() {
       }
       setRawNhtsa(r)
       const normalized = normalizeVehicle(r)
+
+      // Lookup de la categorie dans la table vehicles
+      const category = await lookupCategory(normalized.year, normalized.make, normalized.model)
+      normalized.category = category
+
       setVehicle(normalized)
       const matched = matchRules(normalized, rules)
       setResults(matched)
@@ -79,6 +126,7 @@ export default function Simulator() {
   }
 
   const displayResults = showAll ? results?.all : results?.best
+  const catStyle = vehicle ? categoryBadgeColor(vehicle.category) : null
 
   return (
     <div className="page">
@@ -138,6 +186,14 @@ export default function Simulator() {
                 <div className="card-subtitle">Données décodées via API NHTSA</div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {vehicle.category && catStyle && (
+                  <span style={{ background: catStyle.bg, color: catStyle.color, borderRadius: 12, fontSize: 11, fontWeight: 700, padding: '3px 10px' }}>
+                    {vehicle.category}
+                  </span>
+                )}
+                {!vehicle.category && (
+                  <span className="badge badge-orange" title="Catégorie introuvable dans la base véhicules">⚠ Catégorie inconnue</span>
+                )}
                 {vehicle.fuel_type && <span className="badge badge-blue">{vehicle.fuel_type}</span>}
                 {vehicle.transmission && <span className="badge badge-gray">{vehicle.transmission}</span>}
                 {vehicle.drive_type && <span className="badge badge-gray">{vehicle.drive_type}</span>}
@@ -147,6 +203,7 @@ export default function Simulator() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
                   ['Année', vehicle.year], ['Marque', vehicle.make], ['Modèle', vehicle.model],
+                  ['Catégorie', vehicle.category],
                   ['Moteur', vehicle.engine], ['Transmission', vehicle.transmission],
                   ['Propulsion', vehicle.drive_type], ['Carburant', vehicle.fuel_type],
                   ['Puissance', rawNhtsa?.EngineHP ? rawNhtsa.EngineHP + ' HP' : null],
@@ -217,6 +274,7 @@ export default function Simulator() {
                               <span className="badge badge-gray" style={{ fontSize: 11, whiteSpace: 'normal' }}>
                                 {(() => {
                                   const parts = []
+                                  if (rule.categories?.length) parts.push(rule.categories.join(', '))
                                   if (rule.year_from || rule.year_to) parts.push(`${rule.year_from||'?'}–${rule.year_to||'?'}`)
                                   const makes = rule.makes?.length > 0 ? rule.makes : (rule.make ? [rule.make] : [])
                                   const models = rule.models?.length > 0 ? rule.models : (rule.model ? [rule.model] : [])
