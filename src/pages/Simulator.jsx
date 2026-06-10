@@ -186,11 +186,6 @@ export default function Simulator() {
                 <div className="card-subtitle">Données décodées via API NHTSA</div>
               </div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {vehicle.category && catStyle && (
-                  <span style={{ background: catStyle.bg, color: catStyle.color, borderRadius: 12, fontSize: 11, fontWeight: 700, padding: '3px 10px' }}>
-                    {vehicle.category}
-                  </span>
-                )}
                 {!vehicle.category && (
                   <span className="badge badge-orange" title="Catégorie introuvable dans la base véhicules">⚠ Catégorie inconnue</span>
                 )}
@@ -203,11 +198,9 @@ export default function Simulator() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                 {[
                   ['Année', vehicle.year], ['Marque', vehicle.make], ['Modèle', vehicle.model],
-                  ['Catégorie', vehicle.category],
                   ['Moteur', vehicle.engine], ['Transmission', vehicle.transmission],
                   ['Propulsion', vehicle.drive_type], ['Carburant', vehicle.fuel_type],
                   ['Puissance', rawNhtsa?.EngineHP ? rawNhtsa.EngineHP + ' HP' : null],
-                  ['Carrosserie', rawNhtsa?.BodyClass],
                 ].map(([label, val]) => (
                   <div key={label} style={{ background: 'var(--gray-50)', borderRadius: 8, padding: '10px 12px' }}>
                     <div style={{ fontSize: 11, color: 'var(--gray-400)', marginBottom: 2 }}>{label}</div>
@@ -216,6 +209,16 @@ export default function Simulator() {
                     </div>
                   </div>
                 ))}
+                <div style={{ background: 'var(--gray-50)', borderRadius: 8, padding: '10px 12px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--gray-400)', marginBottom: 2 }}>Type de véhicule</div>
+                  {vehicle.category && catStyle ? (
+                    <span style={{ background: catStyle.bg, color: catStyle.color, borderRadius: 12, fontSize: 12, fontWeight: 700, padding: '2px 10px', display: 'inline-block' }}>
+                      {vehicle.category}
+                    </span>
+                  ) : (
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--gray-300)' }}>—</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
