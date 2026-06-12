@@ -114,34 +114,21 @@ export default function Rules() {
   const [loadingModels, setLoadingModels] = useState(false)
 
   useEffect(() => { loadData() }, [])
-  useEffect(() => { if (showModal && availableMakes.length === 0) loadMakes() }, [showModal])
+  useEffect(() => { if (showModal) loadMakes() }, [form.year_from, form.year_to, showModal])
   useEffect(() => {
     if (form.makes.length > 0) loadModels()
     else { setAvailableModels([]); setForm(f => ({ ...f, models: [] })) }
   }, [form.makes])
   useEffect(() => { estimateCount() }, [form.makes, form.models, form.year_from, form.year_to, form.transmissions, form.fuel_types, form.drive_types, form.engines, form.cylinders])
 
-  // Marques — NHTSA (en direct, pas de BD à maintenir)
-  const VEHICLE_TYPES = ['car', 'truck', 'multipurpose passenger vehicle (mpv)']
+  // Marques — table vehicles (Supabase), liste connue d'origine
   async function loadMakes() {
     setLoadingMakes(true)
-    try {
-      const responses = await Promise.all(
-        VEHICLE_TYPES.map(t =>
-          fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/${encodeURIComponent(t)}?format=json`)
-            .then(r => r.json()).catch(() => ({ Results: [] }))
-        )
-      )
-      const names = new Set()
-      for (const res of responses) {
-        for (const row of res.Results || []) {
-          if (row.MakeName) names.add(row.MakeName.trim())
-        }
-      }
-      setAvailableMakes([...names].sort())
-    } catch {
-      setAvailableMakes([])
-    }
+    const { data } = await supabase.rpc('get_makes', {
+      p_year_from: form.year_from ? parseInt(form.year_from) : null,
+      p_year_to: form.year_to ? parseInt(form.year_to) : null,
+    })
+    setAvailableMakes((data || []).map(r => r.make))
     setLoadingMakes(false)
   }
 
