@@ -118,7 +118,7 @@ export default function Rules() {
   useEffect(() => {
     if (form.makes.length > 0) loadModels()
     else { setAvailableModels([]); setForm(f => ({ ...f, models: [] })) }
-  }, [form.makes])
+  }, [form.makes, form.year_from, form.year_to])
   useEffect(() => { estimateCount() }, [form.makes, form.models, form.year_from, form.year_to, form.transmissions, form.fuel_types, form.drive_types, form.engines, form.cylinders])
 
   // Marques — table vehicles (Supabase), liste connue d'origine
@@ -132,23 +132,49 @@ export default function Rules() {
     setLoadingMakes(false)
   }
 
-  // Modèles — NHTSA (en direct, pour la/les marques sélectionnées)
+  // Modèles — NHTSA (en direct), filtrés par la plage Année si spécifiée
   async function loadModels() {
     if (form.makes.length === 0) return
     setLoadingModels(true)
     try {
-      const responses = await Promise.all(
-        form.makes.map(make =>
-          fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`)
-            .then(r => r.json()).catch(() => ({ Results: [] }))
-        )
-      )
+      const yFrom = form.year_from ? parseInt(form.year_from) : null
+      const yTo = form.year_to ? parseInt(form.year_to) : null
+      let years = null
+      if (yFrom || yTo) {
+        const lo = Math.min(yFrom || yTo, yTo || yFrom)
+        const hi = Math.max(yFrom || yTo, yTo || yFrom)
+        // Au-delà d'~20 ans, équivalent à "toutes les années" — pas la peine
+        // de faire 20+ appels par marque, on prend la liste complète.
+        if (hi - lo <= 20) years = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i)
+      }
+
       const names = new Set()
-      for (const res of responses) {
-        for (const row of res.Results || []) {
-          if (row.Model_Name) names.add(row.Model_Name.trim())
+      if (years) {
+        const responses = await Promise.all(
+          form.makes.flatMap(make => years.map(year =>
+            fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}?format=json`)
+              .then(r => r.json()).catch(() => ({ Results: [] }))
+          ))
+        )
+        for (const res of responses) {
+          for (const row of res.Results || []) {
+            if (row.Model_Name) names.add(row.Model_Name.trim())
+          }
+        }
+      } else {
+        const responses = await Promise.all(
+          form.makes.map(make =>
+            fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`)
+              .then(r => r.json()).catch(() => ({ Results: [] }))
+          )
+        )
+        for (const res of responses) {
+          for (const row of res.Results || []) {
+            if (row.Model_Name) names.add(row.Model_Name.trim())
+          }
         }
       }
+
       const models = [...names].sort()
       setAvailableModels(models)
       setForm(f => ({ ...f, models: f.models.filter(m => models.includes(m)) }))
