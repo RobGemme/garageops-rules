@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { TRANSMISSION_OPTIONS, DRIVE_TYPE_OPTIONS, FUEL_TYPE_OPTIONS, ENGINE_OPTIONS } from '../lib/rules-engine'
 
 const CATEGORIES = ['AUTO', 'VUS/VAN', 'Camionnette']
 
@@ -108,62 +109,66 @@ export default function Rules() {
 
   const [availableMakes, setAvailableMakes] = useState([])
   const [availableModels, setAvailableModels] = useState([])
-  const [availableTrans, setAvailableTrans] = useState([])
-  const [availableDrives, setAvailableDrives] = useState([])
-  const [availableFuels, setAvailableFuels] = useState([])
-  const [availableEngines, setAvailableEngines] = useState([])
   const [vehicleCount, setVehicleCount] = useState(null)
   const [loadingMakes, setLoadingMakes] = useState(false)
   const [loadingModels, setLoadingModels] = useState(false)
-  const [loadingDetails, setLoadingDetails] = useState(false)
 
   useEffect(() => { loadData() }, [])
-  useEffect(() => { if (showModal) loadMakes() }, [form.year_from, form.year_to, showModal])
+  useEffect(() => { if (showModal && availableMakes.length === 0) loadMakes() }, [showModal])
   useEffect(() => {
     if (form.makes.length > 0) loadModels()
     else { setAvailableModels([]); setForm(f => ({ ...f, models: [] })) }
   }, [form.makes])
-  useEffect(() => { loadDetails() }, [form.models, form.makes, form.year_from, form.year_to])
   useEffect(() => { estimateCount() }, [form.makes, form.models, form.year_from, form.year_to, form.transmissions, form.fuel_types, form.drive_types, form.engines])
 
+  // Marques — NHTSA (en direct, pas de BD à maintenir)
+  const VEHICLE_TYPES = ['car', 'truck', 'multipurpose passenger vehicle (mpv)']
   async function loadMakes() {
     setLoadingMakes(true)
-    const { data } = await supabase.rpc('get_makes', {
-      p_year_from: form.year_from ? parseInt(form.year_from) : null,
-      p_year_to: form.year_to ? parseInt(form.year_to) : null,
-    })
-    setAvailableMakes((data || []).map(r => r.make))
+    try {
+      const responses = await Promise.all(
+        VEHICLE_TYPES.map(t =>
+          fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetMakesForVehicleType/${encodeURIComponent(t)}?format=json`)
+            .then(r => r.json()).catch(() => ({ Results: [] }))
+        )
+      )
+      const names = new Set()
+      for (const res of responses) {
+        for (const row of res.Results || []) {
+          if (row.MakeName) names.add(row.MakeName.trim())
+        }
+      }
+      setAvailableMakes([...names].sort())
+    } catch {
+      setAvailableMakes([])
+    }
     setLoadingMakes(false)
   }
 
+  // Modèles — NHTSA (en direct, pour la/les marques sélectionnées)
   async function loadModels() {
     if (form.makes.length === 0) return
     setLoadingModels(true)
-    const { data } = await supabase.rpc('get_models', {
-      p_makes: form.makes,
-      p_year_from: form.year_from ? parseInt(form.year_from) : null,
-      p_year_to: form.year_to ? parseInt(form.year_to) : null,
-    })
-    const models = (data || []).map(r => r.model)
-    setAvailableModels(models)
-    setForm(f => ({ ...f, models: f.models.filter(m => models.includes(m)) }))
+    try {
+      const responses = await Promise.all(
+        form.makes.map(make =>
+          fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMake/${encodeURIComponent(make)}?format=json`)
+            .then(r => r.json()).catch(() => ({ Results: [] }))
+        )
+      )
+      const names = new Set()
+      for (const res of responses) {
+        for (const row of res.Results || []) {
+          if (row.Model_Name) names.add(row.Model_Name.trim())
+        }
+      }
+      const models = [...names].sort()
+      setAvailableModels(models)
+      setForm(f => ({ ...f, models: f.models.filter(m => models.includes(m)) }))
+    } catch {
+      setAvailableModels([])
+    }
     setLoadingModels(false)
-  }
-
-  async function loadDetails() {
-    setLoadingDetails(true)
-    const { data } = await supabase.rpc('get_vehicle_details', {
-      p_makes: form.makes.length > 0 ? form.makes : null,
-      p_models: form.models.length > 0 ? form.models : null,
-      p_year_from: form.year_from ? parseInt(form.year_from) : null,
-      p_year_to: form.year_to ? parseInt(form.year_to) : null,
-    })
-    const rows = data || []
-    setAvailableEngines([...new Set(rows.map(r => r.engine).filter(Boolean))].sort((a, b) => parseFloat(a) - parseFloat(b)))
-    setAvailableTrans([...new Set(rows.map(r => r.transmission).filter(Boolean))].sort())
-    setAvailableDrives([...new Set(rows.map(r => r.drive).filter(Boolean))].sort())
-    setAvailableFuels([...new Set(rows.map(r => r.fuel).filter(Boolean))].sort())
-    setLoadingDetails(false)
   }
 
   async function estimateCount() {
@@ -503,38 +508,34 @@ export default function Rules() {
                 />
               </div>
 
-              {/* Moteur, Trans, Propulsion, Carburant — 4 colonnes */}
+              {/* Moteur, Trans, Propulsion, Carburant — 4 colonnes (listes fixes normalisées) */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
                 <TagSelector
-                  label={`Moteur${availableEngines.length > 0 ? ` (${availableEngines.length})` : ''}`}
-                  options={availableEngines}
+                  label="Moteur (cyl.)"
+                  options={ENGINE_OPTIONS}
                   selected={form.engines}
                   onChange={val => setField('engines', val)}
-                  loading={loadingDetails}
                   hint="Vide = tous"
                 />
                 <TagSelector
-                  label={`Transmission${availableTrans.length > 0 ? ` (${availableTrans.length})` : ''}`}
-                  options={availableTrans}
+                  label="Transmission"
+                  options={TRANSMISSION_OPTIONS}
                   selected={form.transmissions}
                   onChange={val => setField('transmissions', val)}
-                  loading={loadingDetails}
                   hint="Vide = toutes"
                 />
                 <TagSelector
-                  label={`Propulsion${availableDrives.length > 0 ? ` (${availableDrives.length})` : ''}`}
-                  options={availableDrives}
+                  label="Propulsion"
+                  options={DRIVE_TYPE_OPTIONS}
                   selected={form.drive_types}
                   onChange={val => setField('drive_types', val)}
-                  loading={loadingDetails}
                   hint="Vide = toutes"
                 />
                 <TagSelector
-                  label={`Carburant${availableFuels.length > 0 ? ` (${availableFuels.length})` : ''}`}
-                  options={availableFuels}
+                  label="Carburant"
+                  options={FUEL_TYPE_OPTIONS}
                   selected={form.fuel_types}
                   onChange={val => setField('fuel_types', val)}
-                  loading={loadingDetails}
                   hint="Vide = tous"
                 />
               </div>
