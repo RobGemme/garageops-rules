@@ -43,9 +43,19 @@ export const TRANSMISSION_OPTIONS = ['AUTO', 'MANUAL', 'CVT', 'DCT', 'AMT', 'SEM
 export const FUEL_TYPE_OPTIONS = ['GASOLINE', 'DIESEL', 'HYBRID', 'PHEV', 'ELECTRIC', 'FLEX', 'CNG']
 export const CATEGORY_OPTIONS = ['AUTO', 'VUS/VAN', 'Camionnette']
 
-// Liste fixe — basée sur EngineCylinders (NHTSA). Stable dans le temps,
-// aucune mise à jour requise.
-export const ENGINE_OPTIONS = ['3', '4', '5', '6', '8', '10', '12', 'ELECTRIC']
+// Cylindrée (L) — liste fixe normalisée
+export const DISPLACEMENT_OPTIONS = [
+  '0.6','0.9','1.0','1.1','1.2','1.3','1.4','1.5','1.6','1.7','1.8','1.9',
+  '2.0','2.1','2.2','2.3','2.4','2.5','2.6','2.7','2.8','2.9',
+  '3.0','3.1','3.2','3.3','3.4','3.5','3.6','3.7','3.8','3.9',
+  '4.0','4.1','4.2','4.3','4.4','4.5','4.6','4.7','4.8','4.9',
+  '5.0','5.2','5.3','5.4','5.5','5.6','5.7','5.8','5.9',
+  '6.0','6.1','6.2','6.3','6.4','6.5','6.6','6.7','6.8',
+  '7.0','7.4','8.0','8.3',
+]
+
+// Nombre de cylindres — liste fixe normalisée (basée sur EngineCylinders/NHTSA)
+export const CYLINDER_OPTIONS = ['3', '4', '5', '6', '8', '10', '12', 'ELECTRIC']
 
 // Score de spécificité d'une règle (somme des critères remplis).
 // Utilisé pour le tri/affichage et pour l'export CSV.
@@ -59,6 +69,7 @@ export function scoreRule(rule) {
   if (rule.drive_types?.length > 0 || rule.drive_type) s += 2
   if (rule.fuel_types?.length > 0 || rule.fuel_type) s += 2
   if (rule.engines?.length > 0 || rule.engine) s += 1
+  if (rule.cylinders?.length > 0 || rule.cylinder) s += 1
   return s
 }
 
