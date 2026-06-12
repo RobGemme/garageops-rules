@@ -481,8 +481,8 @@ export default function Rules() {
                 </div>
               </div>
 
-              {/* Marques */}
-              <div style={{ marginBottom: 16 }}>
+              {/* Marques + Modèles */}
+              <div className="form-row form-row-2" style={{ marginBottom: 16 }}>
                 <TagSelector
                   label={`Marques${loadingMakes ? '' : ` (${availableMakes.length} disponibles)`}`}
                   options={availableMakes}
@@ -491,10 +491,6 @@ export default function Rules() {
                   loading={loadingMakes}
                   hint={form.makes.length === 0 ? 'Vide = toutes les marques' : null}
                 />
-              </div>
-
-              {/* Modèles */}
-              <div style={{ marginBottom: 16 }}>
                 <TagSelector
                   label={form.makes.length > 0 ? `Modèles${loadingModels ? '' : ` (${availableModels.length} disponibles)`}` : 'Modèles'}
                   options={availableModels}

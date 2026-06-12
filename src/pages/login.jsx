@@ -6,7 +6,7 @@ export default function Login({ onLogin }) {
   const [error, setError] = useState('')
 
   function handleLogin() {
-    if (user.toLowerCase() === 'dylan' && pass === 'wynns') {
+    if (user.toLowerCase() === 'robin' && pass === 'regles') {
       onLogin()
     } else {
       setError('Identifiants invalides. Réessayez.')
@@ -30,7 +30,7 @@ export default function Login({ onLogin }) {
               GarageOps <span style={{ color: 'var(--blue)' }}>Rules</span>
             </span>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>Accès démo — Wynn's</div>
+          <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>Accès interne</div>
         </div>
 
         {/* Card */}
