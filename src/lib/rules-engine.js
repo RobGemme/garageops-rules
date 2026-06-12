@@ -43,6 +43,10 @@ export const TRANSMISSION_OPTIONS = ['AUTO', 'MANUAL', 'CVT', 'DCT', 'AMT', 'SEM
 export const FUEL_TYPE_OPTIONS = ['GASOLINE', 'DIESEL', 'HYBRID', 'PHEV', 'ELECTRIC', 'FLEX', 'CNG']
 export const CATEGORY_OPTIONS = ['AUTO', 'VUS/VAN', 'Camionnette']
 
+// Liste fixe — basée sur EngineCylinders (NHTSA). Stable dans le temps,
+// aucune mise à jour requise.
+export const ENGINE_OPTIONS = ['3', '4', '5', '6', '8', '10', '12', 'ELECTRIC']
+
 // Score de spécificité d'une règle (somme des critères remplis).
 // Utilisé pour le tri/affichage et pour l'export CSV.
 export function scoreRule(rule) {
