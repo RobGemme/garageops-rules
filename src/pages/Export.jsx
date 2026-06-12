@@ -27,6 +27,7 @@ function CategoryBadges({ categories }) {
 
 export default function Export() {
   const [rules, setRules] = useState([])
+  const [maintenanceTypes, setMaintenanceTypes] = useState([])
   const [loading, setLoading] = useState(true)
 
   // Décodeur
@@ -34,12 +35,21 @@ export default function Export() {
   const [decoded, setDecoded] = useState(null)
   const [decodeError, setDecodeError] = useState('')
 
+  // Import
+  const [replaceAll, setReplaceAll] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+
   useEffect(() => { loadRules() }, [])
 
   async function loadRules() {
     setLoading(true)
-    const { data } = await supabase.from('rules').select('*, maintenance_types(code, name)').order('created_at', { ascending: false })
-    setRules(data || [])
+    const [{ data: rulesData }, { data: typesData }] = await Promise.all([
+      supabase.from('rules').select('*, maintenance_types(code, name)').order('created_at', { ascending: false }),
+      supabase.from('maintenance_types').select('*'),
+    ])
+    setRules(rulesData || [])
+    setMaintenanceTypes(typesData || [])
     setLoading(false)
   }
 
@@ -50,6 +60,7 @@ export default function Export() {
 
   function handleDecode() {
     setDecodeError('')
+    setImportResult(null)
     if (!csvText.trim()) { setDecoded(null); return }
     try {
       const parsed = csvToRules(csvText)
@@ -59,6 +70,63 @@ export default function Export() {
       setDecodeError('Erreur de lecture du CSV : ' + e.message)
       setDecoded(null)
     }
+  }
+
+  async function handleImport() {
+    if (!decoded || decoded.length === 0) return
+    setImporting(true)
+    setImportResult(null)
+
+    const skipped = []
+    const payloads = []
+
+    for (const rule of decoded) {
+      const mtype = maintenanceTypes.find(t => t.code?.toUpperCase() === rule.maintenance_code?.toUpperCase())
+      if (!mtype) { skipped.push(`${rule.product_code || '?'} (type "${rule.maintenance_code}" introuvable)`); continue }
+      payloads.push({
+        product_code: rule.product_code || null,
+        categories: rule.categories.length > 0 ? rule.categories : null,
+        maintenance_type_id: mtype.id,
+        year_from: rule.year_from,
+        year_to: rule.year_to,
+        makes: rule.makes.length > 0 ? rule.makes : null,
+        models: rule.models.length > 0 ? rule.models : null,
+        make: rule.makes[0] || null,
+        model: rule.models[0] || null,
+        engine: rule.engines[0] || null,
+        cylinder: rule.cylinders[0] || null,
+        transmission: rule.transmissions[0] || null,
+        drive_type: rule.drive_types[0] || null,
+        fuel_type: rule.fuel_types[0] || null,
+        engines: rule.engines.length > 0 ? rule.engines : null,
+        cylinders: rule.cylinders.length > 0 ? rule.cylinders : null,
+        transmissions: rule.transmissions.length > 0 ? rule.transmissions : null,
+        drive_types: rule.drive_types.length > 0 ? rule.drive_types : null,
+        fuel_types: rule.fuel_types.length > 0 ? rule.fuel_types : null,
+        initial_months: rule.initial_months,
+        initial_km: rule.initial_km,
+        repeat_months: rule.repeat_months,
+        repeat_km: rule.repeat_km,
+        price: rule.price,
+        notes: rule.notes,
+        updated_at: new Date().toISOString(),
+      })
+    }
+
+    if (replaceAll) {
+      await supabase.from('rules').delete().not('id', 'is', null)
+    }
+
+    let inserted = 0
+    if (payloads.length > 0) {
+      const { error } = await supabase.from('rules').insert(payloads)
+      if (!error) inserted = payloads.length
+      else skipped.push(`Erreur Supabase : ${error.message}`)
+    }
+
+    setImportResult({ inserted, skipped })
+    setImporting(false)
+    loadRules()
   }
 
   function handleFile(e) {
@@ -128,6 +196,7 @@ export default function Export() {
                         drive_types: row.drive_types ? row.drive_types.split('|') : [],
                         fuel_types: row.fuel_types ? row.fuel_types.split('|') : [],
                         engines: row.engines ? row.engines.split('|') : [],
+                        cylinders: row.cylinders ? row.cylinders.split('|') : [],
                       })}</span></td>
                       <td className="mono">{row.initial_months ? `${row.initial_months}m` : '—'} / {row.initial_km ? `${Number(row.initial_km).toLocaleString()}km` : '—'}</td>
                       <td className="mono">{row.repeat_months ? `${row.repeat_months}m` : '—'} / {row.repeat_km ? `${Number(row.repeat_km).toLocaleString()}km` : '—'}</td>

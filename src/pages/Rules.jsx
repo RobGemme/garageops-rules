@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { TRANSMISSION_OPTIONS, DRIVE_TYPE_OPTIONS, FUEL_TYPE_OPTIONS, ENGINE_OPTIONS } from '../lib/rules-engine'
+import { TRANSMISSION_OPTIONS, DRIVE_TYPE_OPTIONS, FUEL_TYPE_OPTIONS, DISPLACEMENT_OPTIONS, CYLINDER_OPTIONS } from '../lib/rules-engine'
 
 const CATEGORIES = ['AUTO', 'VUS/VAN', 'Camionnette']
 
@@ -10,7 +10,7 @@ const EMPTY_RULE = {
   maintenance_type_id: '',
   year_from: '', year_to: '',
   makes: [], models: [],
-  engines: [], transmissions: [], drive_types: [], fuel_types: [],
+  engines: [], cylinders: [], transmissions: [], drive_types: [], fuel_types: [],
   initial_months: '', initial_km: '',
   repeat_months: '', repeat_km: '',
   price: '', notes: ''
@@ -119,7 +119,7 @@ export default function Rules() {
     if (form.makes.length > 0) loadModels()
     else { setAvailableModels([]); setForm(f => ({ ...f, models: [] })) }
   }, [form.makes])
-  useEffect(() => { estimateCount() }, [form.makes, form.models, form.year_from, form.year_to, form.transmissions, form.fuel_types, form.drive_types, form.engines])
+  useEffect(() => { estimateCount() }, [form.makes, form.models, form.year_from, form.year_to, form.transmissions, form.fuel_types, form.drive_types, form.engines, form.cylinders])
 
   // Marques — NHTSA (en direct, pas de BD à maintenir)
   const VEHICLE_TYPES = ['car', 'truck', 'multipurpose passenger vehicle (mpv)']
@@ -199,8 +199,7 @@ export default function Rules() {
   function openNew() {
     setEditing(null)
     setForm(EMPTY_RULE)
-    setAvailableModels([]); setAvailableTrans([]); setAvailableDrives([])
-    setAvailableFuels([]); setAvailableEngines([]); setVehicleCount(null)
+    setAvailableModels([]); setVehicleCount(null)
     setShowModal(true)
   }
 
@@ -214,6 +213,7 @@ export default function Rules() {
       makes: rule.makes || (rule.make ? [rule.make] : []),
       models: rule.models || (rule.model ? [rule.model] : []),
       engines: rule.engines || (rule.engine ? [rule.engine] : []),
+      cylinders: rule.cylinders || (rule.cylinder ? [rule.cylinder] : []),
       transmissions: rule.transmissions || (rule.transmission ? [rule.transmission] : []),
       drive_types: rule.drive_types || (rule.drive_type ? [rule.drive_type] : []),
       fuel_types: rule.fuel_types || (rule.fuel_type ? [rule.fuel_type] : []),
@@ -225,9 +225,9 @@ export default function Rules() {
   }
 
   function setField(key, val) {
-    if (key === 'makes') setForm(f => ({ ...f, makes: val, models: [], engines: [], transmissions: [], drive_types: [], fuel_types: [] }))
-    else if (key === 'models') setForm(f => ({ ...f, models: val, engines: [], transmissions: [], drive_types: [], fuel_types: [] }))
-    else if (key === 'year_from' || key === 'year_to') setForm(f => ({ ...f, [key]: val, makes: [], models: [], engines: [], transmissions: [], drive_types: [], fuel_types: [] }))
+    if (key === 'makes') setForm(f => ({ ...f, makes: val, models: [], engines: [], cylinders: [], transmissions: [], drive_types: [], fuel_types: [] }))
+    else if (key === 'models') setForm(f => ({ ...f, models: val, engines: [], cylinders: [], transmissions: [], drive_types: [], fuel_types: [] }))
+    else if (key === 'year_from' || key === 'year_to') setForm(f => ({ ...f, [key]: val, makes: [], models: [], engines: [], cylinders: [], transmissions: [], drive_types: [], fuel_types: [] }))
     else setForm(f => ({ ...f, [key]: val }))
   }
 
@@ -252,11 +252,13 @@ export default function Rules() {
       make: form.makes[0] || null,
       model: form.models[0] || null,
       engine: form.engines[0] || null,
+      cylinder: form.cylinders[0] || null,
       transmission: form.transmissions[0] || null,
       drive_type: form.drive_types[0] || null,
       fuel_type: form.fuel_types[0] || null,
       // Nouvelles colonnes multi
       engines: form.engines.length > 0 ? form.engines : null,
+      cylinders: form.cylinders.length > 0 ? form.cylinders : null,
       transmissions: form.transmissions.length > 0 ? form.transmissions : null,
       drive_types: form.drive_types.length > 0 ? form.drive_types : null,
       fuel_types: form.fuel_types.length > 0 ? form.fuel_types : null,
@@ -288,6 +290,7 @@ export default function Rules() {
     if (rule.drive_types?.length > 0 || rule.drive_type) s += 2
     if (rule.fuel_types?.length > 0 || rule.fuel_type) s += 2
     if (rule.engines?.length > 0 || rule.engine) s += 1
+    if (rule.cylinders?.length > 0 || rule.cylinder) s += 1
     return s
   }
 
@@ -300,8 +303,12 @@ export default function Rules() {
     const trans = rule.transmissions?.length > 0 ? rule.transmissions : (rule.transmission ? [rule.transmission] : [])
     const drives = rule.drive_types?.length > 0 ? rule.drive_types : (rule.drive_type ? [rule.drive_type] : [])
     const fuels = rule.fuel_types?.length > 0 ? rule.fuel_types : (rule.fuel_type ? [rule.fuel_type] : [])
+    const engines = rule.engines?.length > 0 ? rule.engines : (rule.engine ? [rule.engine] : [])
+    const cylinders = rule.cylinders?.length > 0 ? rule.cylinders : (rule.cylinder ? [rule.cylinder] : [])
     if (makes.length > 0) parts.push(makes.join(', '))
     if (models.length > 0) parts.push(models.join(', '))
+    if (engines.length > 0) parts.push(engines.map(e => `${e}L`).join(', '))
+    if (cylinders.length > 0) parts.push(cylinders.map(c => c === 'ELECTRIC' ? 'Électrique' : `${c} cyl`).join(', '))
     if (trans.length > 0) parts.push(trans.join(', '))
     if (drives.length > 0) parts.push(drives.join(', '))
     if (fuels.length > 0) parts.push(fuels.join(', '))
@@ -508,13 +515,20 @@ export default function Rules() {
                 />
               </div>
 
-              {/* Moteur, Trans, Propulsion, Carburant — 4 colonnes (listes fixes normalisées) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+              {/* Cylindrée, Cylindres, Trans, Propulsion, Carburant — 5 colonnes (listes fixes normalisées) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
                 <TagSelector
-                  label="Moteur (cyl.)"
-                  options={ENGINE_OPTIONS}
+                  label="Cylindrée (L)"
+                  options={DISPLACEMENT_OPTIONS}
                   selected={form.engines}
                   onChange={val => setField('engines', val)}
+                  hint="Vide = toutes"
+                />
+                <TagSelector
+                  label="Cylindres"
+                  options={CYLINDER_OPTIONS}
+                  selected={form.cylinders}
+                  onChange={val => setField('cylinders', val)}
                   hint="Vide = tous"
                 />
                 <TagSelector
