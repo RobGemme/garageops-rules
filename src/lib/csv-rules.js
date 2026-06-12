@@ -23,6 +23,7 @@ export const CSV_COLUMNS = [
   'drive_types',
   'fuel_types',
   'engines',
+  'cylinders',
   'initial_months',
   'initial_km',
   'repeat_months',
@@ -62,6 +63,7 @@ export function ruleToRow(rule) {
     drive_types: multi(rule, 'drive_types', 'drive_type').join('|'),
     fuel_types: multi(rule, 'fuel_types', 'fuel_type').join('|'),
     engines: multi(rule, 'engines', 'engine').join('|'),
+    cylinders: multi(rule, 'cylinders', 'cylinder').join('|'),
     initial_months: rule.initial_months ?? '',
     initial_km: rule.initial_km ?? '',
     repeat_months: rule.repeat_months ?? '',
@@ -157,6 +159,7 @@ export function decodeRow(row) {
     drive_types: splitPipe(row.drive_types),
     fuel_types: splitPipe(row.fuel_types),
     engines: splitPipe(row.engines),
+    cylinders: splitPipe(row.cylinders),
     initial_months: row.initial_months ? parseInt(row.initial_months) : null,
     initial_km: row.initial_km ? parseInt(row.initial_km) : null,
     repeat_months: row.repeat_months ? parseInt(row.repeat_months) : null,
@@ -178,6 +181,7 @@ export function describeDecodedRule(rule) {
   if (rule.transmissions?.length) parts.push(rule.transmissions.join(', '))
   if (rule.drive_types?.length) parts.push(rule.drive_types.join(', '))
   if (rule.fuel_types?.length) parts.push(rule.fuel_types.join(', '))
-  if (rule.engines?.length) parts.push(rule.engines.join(', '))
+  if (rule.engines?.length) parts.push(rule.engines.map(e => `${e}L`).join(', '))
+  if (rule.cylinders?.length) parts.push(rule.cylinders.map(c => c === 'ELECTRIC' ? 'Électrique' : `${c} cyl`).join(', '))
   return parts.length ? parts.join(' · ') : 'Tous véhicules'
 }
