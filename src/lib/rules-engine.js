@@ -43,6 +43,21 @@ export const TRANSMISSION_OPTIONS = ['AUTO', 'MANUAL', 'CVT', 'DCT', 'AMT', 'SEM
 export const FUEL_TYPE_OPTIONS = ['GASOLINE', 'DIESEL', 'HYBRID', 'PHEV', 'ELECTRIC', 'FLEX', 'CNG']
 export const CATEGORY_OPTIONS = ['AUTO', 'VUS/VAN', 'Camionnette']
 
+// Score de spécificité d'une règle (somme des critères remplis).
+// Utilisé pour le tri/affichage et pour l'export CSV.
+export function scoreRule(rule) {
+  let s = 0
+  if (rule.categories?.length > 0) s += 3
+  if (rule.year_from || rule.year_to) s += 2
+  if (rule.makes?.length > 0 || rule.make) s += 3
+  if (rule.models?.length > 0 || rule.model) s += 4
+  if (rule.transmissions?.length > 0 || rule.transmission) s += 2
+  if (rule.drive_types?.length > 0 || rule.drive_type) s += 2
+  if (rule.fuel_types?.length > 0 || rule.fuel_type) s += 2
+  if (rule.engines?.length > 0 || rule.engine) s += 1
+  return s
+}
+
 export function normalizeVehicle(nhtsaResult) {
   return {
     year: parseInt(nhtsaResult.ModelYear) || null,
