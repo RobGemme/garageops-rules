@@ -255,6 +255,7 @@ export default function Simulator() {
                   {[
                     { label: 'Transmission', raw: rawNhtsa?.TransmissionStyle, norm: vehicle.transmission },
                     { label: 'Propulsion', raw: rawNhtsa?.DriveType, norm: vehicle.drive_type },
+                    { label: 'Body Class', raw: rawNhtsa?.BodyClass, norm: null },
                     { label: 'Carburant', raw: rawNhtsa?.FuelTypePrimary, norm: vehicle.fuel_type },
                     { label: 'Cylindrée', raw: rawNhtsa?.DisplacementL ? rawNhtsa.DisplacementL + ' L' : null, norm: vehicle.engine },
                   ].map(({ label, raw, norm }) => (
@@ -263,10 +264,8 @@ export default function Simulator() {
                       <span className="mono" style={{ color: raw ? 'var(--gray-600)' : 'var(--gray-300)', background: 'var(--gray-50)', padding: '2px 8px', borderRadius: 4, minWidth: 120 }}>
                         {raw || '— (vide)'}
                       </span>
-                      <span style={{ color: 'var(--gray-300)' }}>→</span>
-                      <span style={{ fontWeight: 700, color: norm ? 'var(--blue)' : 'var(--gray-300)' }}>
-                        {norm || '—'}
-                      </span>
+                      {norm !== null && <span style={{ color: 'var(--gray-300)' }}>→</span>}
+                      {norm !== null && <span style={{ fontWeight: 700, color: norm ? 'var(--blue)' : 'var(--gray-300)' }}>{norm || '—'}</span>}
                     </div>
                   ))}
                 </div>
