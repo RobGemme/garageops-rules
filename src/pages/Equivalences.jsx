@@ -1,7 +1,7 @@
 import {
-  DRIVE_TYPE_MAP,
-  TRANSMISSION_MAP,
-  FUEL_TYPE_MAP,
+  DRIVE_TYPE_MAP, DRIVE_TYPE_PATTERNS,
+  TRANSMISSION_MAP, TRANSMISSION_PATTERNS,
+  FUEL_TYPE_MAP, FUEL_TYPE_PATTERNS,
   DRIVE_TYPE_OPTIONS,
   TRANSMISSION_OPTIONS,
   FUEL_TYPE_OPTIONS,
@@ -42,12 +42,10 @@ const SECTION_COLORS = {
   CNG:        { bg: '#F3F4F6', color: '#374151', border: '#E5E7EB' },
 }
 
-function EqSection({ title, map, options, icon, description }) {
+function EqSection({ title, map, patterns, options, icon, description }) {
   const inverted = invertMap(map)
 
-  // Catégories qui ont des valeurs brutes mappées
   const withMappings = options.filter(opt => inverted[opt])
-  // Catégories déclarées dans OPTIONS mais sans aucune valeur brute NHTSA
   const withoutMappings = options.filter(opt => !inverted[opt])
 
   return (
@@ -97,12 +95,34 @@ function EqSection({ title, map, options, icon, description }) {
                   <span style={{ fontWeight: 400, fontSize: 11 }}>aucune valeur</span>
                 </div>
                 <div style={{ background: 'white', padding: '10px 12px', fontSize: 12, color: 'var(--gray-400)', fontStyle: 'italic' }}>
-                  Aucune valeur NHTSA mappée
+                  Aucune valeur exacte mappée
                 </div>
               </div>
             )
           })}
         </div>
+
+        {/* Cascade de patterns (filet de sécurité pour valeurs inconnues) */}
+        {patterns?.length > 0 && (
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--gray-100)', paddingTop: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-500)', marginBottom: 8 }}>
+              🔁 Cascade de patterns — filet de sécurité si aucun match exact
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {patterns.map(({ pattern, value }, i) => {
+                const c = SECTION_COLORS[value] || { bg: '#F3F4F6', color: '#374151', border: '#E5E7EB' }
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, background: c.bg, border: `1px solid ${c.border}`, borderRadius: 6, padding: '4px 10px', fontSize: 12 }}>
+                    <span style={{ color: 'var(--gray-400)', fontFamily: 'DM Mono, monospace' }}>{pattern.source}</span>
+                    <span style={{ color: 'var(--gray-300)' }}>→</span>
+                    <span style={{ fontWeight: 700, color: c.color }}>{value}</span>
+                    <span style={{ fontSize: 10, color: 'var(--gray-400)' }}>#{i + 1}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -114,38 +134,41 @@ export default function Equivalences() {
       <div className="page-header">
         <h1 className="page-title">Équivalences</h1>
         <p className="page-subtitle">
-          Tables de normalisation : comment les valeurs brutes NHTSA sont traduites vers les catégories GarageOps.
-          Pour modifier un mapping, contactez l'administrateur système.
+          Tables de normalisation : comment les valeurs brutes sont traduites vers les catégories GarageOps.
+          Sources : NHTSA, VinQuery, données clients importées.
         </p>
       </div>
 
       <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '12px 16px', marginBottom: 24, fontSize: 13, color: '#92400E', display: 'flex', gap: 10 }}>
         <span>ℹ️</span>
-        <span>Ces tables s'appliquent lors du décodage VIN dans le Simulateur. Chaque valeur brute retournée par NHTSA (<span className="mono">DriveType</span>, <span className="mono">TransmissionStyle</span>, <span className="mono">FuelTypePrimary</span>) est traduite vers la catégorie normalisée correspondante avant d'être comparée aux règles.</span>
+        <span>Étape 1 : match exact dans la table. Étape 2 si aucun match : cascade de patterns dans l'ordre de priorité (#1 = priorité maximale). Valeur brute retournée telle quelle si aucun pattern ne matche.</span>
       </div>
 
       <EqSection
         title="Propulsion"
         icon="🔧"
         map={DRIVE_TYPE_MAP}
+        patterns={DRIVE_TYPE_PATTERNS}
         options={DRIVE_TYPE_OPTIONS}
-        description="Valeur brute NHTSA (DriveType) → catégorie normalisée GarageOps"
+        description="DriveType (NHTSA/VinQuery/client) → catégorie normalisée GarageOps"
       />
 
       <EqSection
         title="Transmission"
         icon="⚙️"
         map={TRANSMISSION_MAP}
+        patterns={TRANSMISSION_PATTERNS}
         options={TRANSMISSION_OPTIONS}
-        description="Valeur brute NHTSA (TransmissionStyle) → catégorie normalisée GarageOps"
+        description="TransmissionStyle (NHTSA/VinQuery/client) → catégorie normalisée GarageOps"
       />
 
       <EqSection
         title="Carburant"
         icon="⛽"
         map={FUEL_TYPE_MAP}
+        patterns={FUEL_TYPE_PATTERNS}
         options={FUEL_TYPE_OPTIONS}
-        description="Valeur brute NHTSA (FuelTypePrimary) → catégorie normalisée GarageOps"
+        description="FuelTypePrimary (NHTSA/VinQuery/client) → catégorie normalisée GarageOps"
       />
     </div>
   )
