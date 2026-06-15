@@ -256,14 +256,27 @@ export function normalizeFuelType(raw) {
 }
 
 export function normalizeVehicle(nhtsaResult) {
+  const fuel_type = normalizeFuelType(nhtsaResult.FuelTypePrimary)
+  const isElectric = fuel_type === 'ELECTRIC'
+
+  const rawTransmission = nhtsaResult.TransmissionStyle
+  const transmission = rawTransmission
+    ? normalizeTransmission(rawTransmission)
+    : (isElectric ? 'AUTO' : null)
+
+  const displacementL = nhtsaResult.DisplacementL ? parseFloat(nhtsaResult.DisplacementL) : null
+  const engine = displacementL
+    ? `${displacementL.toFixed(1)}L`
+    : (isElectric ? 'Électrique' : null)
+
   return {
     year: parseInt(nhtsaResult.ModelYear) || null,
     make: nhtsaResult.Make || null,
     model: nhtsaResult.Model || null,
-    engine: nhtsaResult.DisplacementL ? `${parseFloat(nhtsaResult.DisplacementL).toFixed(1)}L` : null,
-    transmission: normalizeTransmission(nhtsaResult.TransmissionStyle),
+    engine,
+    transmission,
     drive_type: normalizeDriveType(nhtsaResult.DriveType),
-    fuel_type: normalizeFuelType(nhtsaResult.FuelTypePrimary),
+    fuel_type,
     category: null,
     raw: {
       transmission: nhtsaResult.TransmissionStyle,
@@ -272,6 +285,7 @@ export function normalizeVehicle(nhtsaResult) {
       body_class: nhtsaResult.BodyClass,
       engine_hp: nhtsaResult.EngineHP,
       cylinders: nhtsaResult.EngineCylinders,
+      displacement: nhtsaResult.DisplacementL,
     }
   }
 }
