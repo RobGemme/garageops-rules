@@ -245,6 +245,32 @@ export default function Simulator() {
                   )}
                 </div>
               </div>
+
+              {/* Valeurs brutes NHTSA → normalisées */}
+              <div style={{ marginTop: 14, borderTop: '1px solid var(--gray-100)', paddingTop: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gray-400)', marginBottom: 8 }}>
+                  🔁 Valeurs brutes NHTSA → normalisées via tables d'équivalence
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {[
+                    { label: 'Transmission', raw: rawNhtsa?.TransmissionStyle, norm: vehicle.transmission },
+                    { label: 'Propulsion', raw: rawNhtsa?.DriveType, norm: vehicle.drive_type },
+                    { label: 'Carburant', raw: rawNhtsa?.FuelTypePrimary, norm: vehicle.fuel_type },
+                    { label: 'Cylindrée', raw: rawNhtsa?.DisplacementL ? rawNhtsa.DisplacementL + ' L' : null, norm: vehicle.engine },
+                  ].map(({ label, raw, norm }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                      <span style={{ color: 'var(--gray-400)', width: 80, flexShrink: 0 }}>{label}</span>
+                      <span className="mono" style={{ color: raw ? 'var(--gray-600)' : 'var(--gray-300)', background: 'var(--gray-50)', padding: '2px 8px', borderRadius: 4, minWidth: 120 }}>
+                        {raw || '— (vide)'}
+                      </span>
+                      <span style={{ color: 'var(--gray-300)' }}>→</span>
+                      <span style={{ fontWeight: 700, color: norm ? 'var(--blue)' : 'var(--gray-300)' }}>
+                        {norm || '—'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
