@@ -269,13 +269,24 @@ export function normalizeVehicle(nhtsaResult) {
     ? `${displacementL.toFixed(1)}L`
     : (isElectric ? 'Électrique' : null)
 
+  // Normalisation intelligente de la propulsion :
+  // "4x2" / "2WD" est ambigu — pickup truck → RWD, tout le reste → FWD
+  const rawDrive = nhtsaResult.DriveType || ''
+  let drive_type
+  if (/^(4x2|4X2|2wd|2WD|2-wheel drive)$/i.test(rawDrive.trim())) {
+    const bodyClass = nhtsaResult.BodyClass || ''
+    drive_type = /pickup|truck/i.test(bodyClass) ? 'RWD' : 'FWD'
+  } else {
+    drive_type = normalizeDriveType(rawDrive || null)
+  }
+
   return {
     year: parseInt(nhtsaResult.ModelYear) || null,
     make: nhtsaResult.Make || null,
     model: nhtsaResult.Model || null,
     engine,
     transmission,
-    drive_type: normalizeDriveType(nhtsaResult.DriveType),
+    drive_type,
     fuel_type,
     category: null,
     raw: {
