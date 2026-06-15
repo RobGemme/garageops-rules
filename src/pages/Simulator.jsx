@@ -3,7 +3,32 @@ import { supabase } from '../lib/supabase'
 import { normalizeVehicle, matchRules } from '../lib/rules-engine'
 
 const EXAMPLE_VINS = [
-  { label: 'Subaru Crosstrek', vin: 'JF2GPACC9E8227316' },
+  // EV / PHEV / Hybride
+  { label: 'Hyundai Ioniq 5 2024', vin: 'KM8KNDDF4RU329320' },
+  { label: 'Mitsubishi Outlander PHEV 2025', vin: 'JA4T5VA96SZ604024' },
+  { label: 'Mitsubishi Outlander PHEV 2018', vin: 'JA4J24A57JZ620397' },
+  { label: 'VW ID.4 2024', vin: '1V2JSPE84RC023328' },
+  { label: 'Hyundai Kona électrique', vin: 'KM8K23AG3LU060833' },
+  // VUS
+  { label: 'Honda HR-V 2023', vin: '3CZRZ2H53PM107960' },
+  { label: 'Honda HR-V 2016', vin: '3CZRU5H31GM104375' },
+  { label: 'Honda CR-V 2018', vin: '2HKRW1H33JH000900' },
+  { label: 'Subaru Forester 2024', vin: 'JF2SKEDC9RH421865' },
+  { label: 'Subaru Crosstrek', vin: 'JF2GUHDC4T8211053' },
+  { label: 'Acura MDX 2011', vin: '2HNYD2H61BH000206' },
+  { label: 'Kia Seltos 2021', vin: 'KNDEUCAA2M7179562' },
+  // Autos
+  { label: 'Toyota Corolla 2017', vin: '2T1BURHE8HC903211' },
+  { label: 'Hyundai Elantra 2023', vin: 'KMHLM4AG6PU549284' },
+  { label: 'VW Beetle 2013', vin: '3VW5X7AT4DM808127' },
+  { label: 'Ford Mustang 2011', vin: '1ZVBP8CFXB5137355' },
+  // Camionnettes / Vans
+  { label: 'Ford F-250 SD 2012', vin: '1FT7W2B61CEC27859' },
+  { label: 'GMC Sierra 2500HD', vin: '1GTHK29668E200458' },
+  { label: 'Chevrolet Silverado 1500', vin: '1GCVKREC1GZ175449' },
+  { label: 'Ford Transit 2025', vin: '1FTBR2C82SKA13870' },
+  { label: 'Dodge Grand Caravan 2015', vin: '2C4RDGBG0FR634065' },
+  // Déjà existants
   { label: 'Tesla Model 3', vin: '5YJ3E1EB0LF643193' },
   { label: 'Silverado HD', vin: '1GC1YNEY3MF251381' },
 ]
