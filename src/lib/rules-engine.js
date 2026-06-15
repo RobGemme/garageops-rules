@@ -262,7 +262,7 @@ export function normalizeVehicle(nhtsaResult) {
   const rawTransmission = nhtsaResult.TransmissionStyle
   const transmission = rawTransmission
     ? normalizeTransmission(rawTransmission)
-    : (isElectric ? 'AUTO' : null)
+    : null
 
   const displacementL = nhtsaResult.DisplacementL ? parseFloat(nhtsaResult.DisplacementL) : null
   const engine = displacementL
