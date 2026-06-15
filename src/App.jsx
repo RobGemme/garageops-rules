@@ -4,6 +4,7 @@ import Rules from './pages/Rules.jsx'
 import Simulator from './pages/Simulator.jsx'
 import Report from './pages/Report.jsx'
 import Export from './pages/Export.jsx'
+import Equivalences from './pages/Equivalences.jsx'
 import Login from './pages/login.jsx'
 
 function Topbar({ onLogout }) {
@@ -22,6 +23,7 @@ function Topbar({ onLogout }) {
         <NavLink to="/simulateur" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>🔍 Simulateur VIN</NavLink>
         <NavLink to="/rapport" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>📊 Rapport</NavLink>
         <NavLink to="/export" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>⬇ Export</NavLink>
+        <NavLink to="/equivalences" className={({isActive}) => 'nav-link' + (isActive ? ' active' : '')}>🔁 Équivalences</NavLink>
         <button onClick={onLogout} className="btn btn-secondary btn-sm" style={{ marginLeft: 8 }}>Déconnexion</button>
       </nav>
     </header>
@@ -52,6 +54,7 @@ export default function App() {
           <Route path="/simulateur" element={<Simulator />} />
           <Route path="/rapport" element={<Report />} />
           <Route path="/export" element={<Export />} />
+          <Route path="/equivalences" element={<Equivalences />} />
         </Routes>
       </main>
     </div>
